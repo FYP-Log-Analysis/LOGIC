@@ -1,0 +1,974 @@
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">40961</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>4</Task>
+<Opcode>1</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-11-23 07:12:55.853058+00:00"></TimeCreated>
+<EventRecordID>1</EventRecordID>
+<Correlation ActivityID="{d2057fbe-5cb5-0000-ac85-0bd2b55cdc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="10356" ThreadID="1524"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-18"></Security>
+</System>
+<EventData></EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">53504</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>111</Task>
+<Opcode>10</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-11-23 07:12:56.621634+00:00"></TimeCreated>
+<EventRecordID>2</EventRecordID>
+<Correlation ActivityID="{d2057fbe-5cb5-0000-ac85-0bd2b55cdc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="10356" ThreadID="9704"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-18"></Security>
+</System>
+<EventData><Data Name="param1">10356</Data>
+<Data Name="param2">DefaultAppDomain</Data>
+</EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">40962</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>4</Task>
+<Opcode>2</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-11-23 07:12:57.091448+00:00"></TimeCreated>
+<EventRecordID>3</EventRecordID>
+<Correlation ActivityID="{d2057fbe-5cb5-0000-ac85-0bd2b55cdc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="10356" ThreadID="1524"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-18"></Security>
+</System>
+<EventData></EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">4104</EventID>
+<Version>1</Version>
+<Level>3</Level>
+<Task>2</Task>
+<Opcode>15</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-11-23 07:12:57.611074+00:00"></TimeCreated>
+<EventRecordID>4</EventRecordID>
+<Correlation ActivityID="{d2057fbe-5cb5-0003-80a6-09d2b55cdc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="10356" ThreadID="9892"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-18"></Security>
+</System>
+<EventData><Data Name="MessageNumber">1</Data>
+<Data Name="MessageTotal">1</Data>
+<Data Name="ScriptBlockText">
+ $type = @"
+ using System;
+ using System.IO;
+ using System.Runtime.InteropServices;
+ public class Util
+ {
+ [StructLayout(LayoutKind.Sequential, Pack=8)]
+ public struct UNICODE_STRING : IDisposable
+ {
+ public ushort Length;
+ public ushort MaximumLength;
+ private IntPtr buffer;
+ public UNICODE_STRING(string s)
+ {
+ Length = (ushort)(s.Length * 2);
+ MaximumLength = (ushort)(Length + 2);
+ buffer = Marshal.StringToHGlobalUni(s);
+ }
+ public void Dispose()
+ {
+ Marshal.FreeHGlobal(buffer);
+ buffer = IntPtr.Zero;
+ }
+ public override string ToString()
+ {
+ return Marshal.PtrToStringUni(buffer);
+ }
+ }
+ const UInt16 IMAGE_FILE_MACHINE_UNKNOWN = 0x0;
+ static IntPtr INVALID_HANDLE_VALUE = (IntPtr)(-1);
+ [DllImport("kernel32.dll", EntryPoint="BasepGetExeArchType", CharSet=CharSet.Unicode)]
+ public static extern long BasepGetExeArchType(out ushort pExeType, IntPtr hFile, ref UNICODE_STRING FileName);
+ [DllImport("kernel32.dll", EntryPoint="CreateFileW", CharSet = CharSet.Unicode)]
+ public static extern IntPtr CreateFileW([MarshalAs(UnmanagedType.LPWStr)] string lpFileName,
+ [MarshalAs(UnmanagedType.U4)] FileAccess dwDesiredAccess,
+ [MarshalAs(UnmanagedType.U4)] FileShare dwShareMode,
+ IntPtr lpSecurityAttributes,
+ [MarshalAs(UnmanagedType.U4)] FileMode dwCreationDisposition,
+ [MarshalAs(UnmanagedType.U4)] FileAttributes dwFlagsAndAttributes,
+ IntPtr hTemplateFile);
+ [DllImport("kernel32.dll", EntryPoint="CloseHandle", CharSet = CharSet.Unicode)]
+ public static extern bool CloseHandle(IntPtr Handle);
+ public static ushort GetAppExeType(String AppPath)
+ {
+ IntPtr FileHandle;
+ ushort ExeType = IMAGE_FILE_MACHINE_UNKNOWN;
+ FileHandle = CreateFileW(AppPath,
+ FileAccess.Read,
+ FileShare.Read | FileShare.Delete,
+ IntPtr.Zero,
+ FileMode.Open,
+ FileAttributes.Normal,
+ IntPtr.Zero);
+ if (INVALID_HANDLE_VALUE != FileHandle)
+ {
+ UNICODE_STRING FileName = new UNICODE_STRING(AppPath);
+ ushort TempExeType = IMAGE_FILE_MACHINE_UNKNOWN;
+ long Status;
+ Status = BasepGetExeArchType(out TempExeType, FileHandle, ref FileName);
+ if (Status &gt;= 0)
+ {
+ ExeType = TempExeType;
+ }
+ CloseHandle(FileHandle);
+ }
+ return ExeType;
+ }
+ }
+"@
+ Add-Type -TypeDefinition $type -PassThru -IgnoreWarnings | out-null; $res = 0; if(
+ ((test-path $env:windir\system32\concrt140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\concrt140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140chs.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140chs.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140cht.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140cht.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140deu.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140deu.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140enu.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140enu.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140esn.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140esn.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140fra.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140fra.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140ita.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140ita.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140jpn.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140jpn.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140kor.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140kor.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140rus.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140rus.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140u.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140u.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140_1.dll) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140_1.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140_2.dll) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140_2.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140_atomic_wait.dll) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140_atomic_wait.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140_codecvt_ids.dll) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140_codecvt_ids.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\vcamp140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\vcamp140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\vccorlib140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\vccorlib140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\vcomp140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\vcomp140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\vcruntime140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\vcruntime140.dll") -eq 0x8664)
+ ){$res=1}; Write-Host "Final result:", $res
+</Data>
+<Data Name="ScriptBlockId">c44459e6-2524-4b5f-9862-d895fd10c318</Data>
+<Data Name="Path"></Data>
+</EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">4103</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>106</Task>
+<Opcode>20</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-11-23 07:12:59.292450+00:00"></TimeCreated>
+<EventRecordID>5</EventRecordID>
+<Correlation ActivityID="{d2057fbe-5cb5-0003-c9a9-09d2b55cdc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="10356" ThreadID="9892"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-18"></Security>
+</System>
+<EventData><Data Name="ContextInfo">        Severity = Informational
+        Host Name = ConsoleHost
+        Host Version = 5.1.26100.7019
+        Host ID = 522dfbf9-b4ae-4c8d-b82e-d379b36afefd
+        Host Application = powershell.exe -ExecutionPolicy Restricted -Command 
+ $type = @"
+                using System;
+                using System.IO;
+                using System.Runtime.InteropServices;
+                public class Util
+                {
+                    [StructLayout(LayoutKind.Sequential, Pack=8)]
+                    public struct UNICODE_STRING : IDisposable
+                    {
+                        public ushort Length;
+                        public ushort MaximumLength;
+                        private IntPtr buffer;
+                        public UNICODE_STRING(string s)
+                        {
+                            Length = (ushort)(s.Length * 2);
+                            MaximumLength = (ushort)(Length + 2);
+                            buffer = Marshal.StringToHGlobalUni(s);
+                        }
+                        public void Dispose()
+                        {
+                            Marshal.FreeHGlobal(buffer);
+                            buffer = IntPtr.Zero;
+                        }
+                        public override string ToString()
+                        {
+                            return Marshal.PtrToStringUni(buffer);
+                        }
+                    }
+                    const UInt16 IMAGE_FILE_MACHINE_UNKNOWN = 0x0;
+                    static IntPtr INVALID_HANDLE_VALUE    = (IntPtr)(-1);
+                    [DllImport("kernel32.dll", EntryPoint="BasepGetExeArchType", CharSet=CharSet.Unicode)]
+                    public static extern long BasepGetExeArchType(out ushort pExeType, IntPtr hFile, ref UNICODE_STRING FileName);
+                    [DllImport("kernel32.dll", EntryPoint="CreateFileW", CharSet = CharSet.Unicode)]
+                    public static extern IntPtr CreateFileW([MarshalAs(UnmanagedType.LPWStr)] string lpFileName,
+                                                            [MarshalAs(UnmanagedType.U4)] FileAccess dwDesiredAccess,
+                                                            [MarshalAs(UnmanagedType.U4)] FileShare dwShareMode,
+                                                            IntPtr lpSecurityAttributes,
+                                                            [MarshalAs(UnmanagedType.U4)] FileMode dwCreationDisposition,
+                                                            [MarshalAs(UnmanagedType.U4)] FileAttributes dwFlagsAndAttributes,
+                                                            IntPtr hTemplateFile);
+                    [DllImport("kernel32.dll", EntryPoint="CloseHandle", CharSet = CharSet.Unicode)]
+                    public static extern bool CloseHandle(IntPtr Handle);
+                    public static ushort GetAppExeType(String AppPath)
+                    {
+                        IntPtr FileHandle;
+                        ushort ExeType = IMAGE_FILE_MACHINE_UNKNOWN;
+                        FileHandle = CreateFileW(AppPath,
+                                                 FileAccess.Read,
+                                                 FileShare.Read | FileShare.Delete,
+                                                 IntPtr.Zero,
+                                                 FileMode.Open,
+                                                 FileAttributes.Normal,
+                                                 IntPtr.Zero);
+                        if (INVALID_HANDLE_VALUE != FileHandle)
+                        {
+                            UNICODE_STRING FileName = new UNICODE_STRING(AppPath);
+                            ushort TempExeType = IMAGE_FILE_MACHINE_UNKNOWN;
+                            long Status;
+                            Status = BasepGetExeArchType(out TempExeType, FileHandle, ref FileName);
+                            if (Status &gt;= 0)
+                            {
+                                ExeType = TempExeType;
+                            }
+                            CloseHandle(FileHandle);
+                        }
+                        return ExeType;
+                    }
+                }
+"@
+ Add-Type -TypeDefinition $type -PassThru -IgnoreWarnings | out-null; $res = 0; if(
+ ((test-path $env:windir\system32\concrt140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\concrt140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140chs.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140chs.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140cht.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140cht.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140deu.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140deu.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140enu.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140enu.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140esn.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140esn.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140fra.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140fra.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140ita.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140ita.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140jpn.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140jpn.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140kor.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140kor.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140rus.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140rus.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140u.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140u.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140_1.dll) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140_1.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140_2.dll) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140_2.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140_atomic_wait.dll) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140_atomic_wait.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140_codecvt_ids.dll) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140_codecvt_ids.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\vcamp140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\vcamp140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\vccorlib140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\vccorlib140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\vcomp140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\vcomp140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\vcruntime140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\vcruntime140.dll") -eq 0x8664)
+ ){$res=1}; Write-Host "Final result:", $res
+
+        Engine Version = 5.1.26100.7019
+        Runspace ID = 8bbe8a4b-563c-4084-849c-105ab928cd83
+        Pipeline ID = 1
+        Command Name = Add-Type
+        Command Type = Cmdlet
+        Script Name = 
+        Command Path = 
+        Sequence Number = 28
+        User = WORKGROUP\SYSTEM
+        Connected User = 
+        Shell ID = Microsoft.PowerShell
+</Data>
+<Data Name="UserData"></Data>
+<Data Name="Payload">CommandInvocation(Add-Type): "Add-Type"
+ParameterBinding(Add-Type): name="TypeDefinition"; value=" using System;
+ using System.IO;
+ using System.Runtime.InteropServices;
+ public class Util
+ {
+ [StructLayout(LayoutKind.Sequential, Pack=8)]
+ public struct UNICODE_STRING : IDisposable
+ {
+ public ushort Length;
+ public ushort MaximumLength;
+ private IntPtr buffer;
+ public UNICODE_STRING(string s)
+ {
+ Length = (ushort)(s.Length * 2);
+ MaximumLength = (ushort)(Length + 2);
+ buffer = Marshal.StringToHGlobalUni(s);
+ }
+ public void Dispose()
+ {
+ Marshal.FreeHGlobal(buffer);
+ buffer = IntPtr.Zero;
+ }
+ public override string ToString()
+ {
+ return Marshal.PtrToStringUni(buffer);
+ }
+ }
+ const UInt16 IMAGE_FILE_MACHINE_UNKNOWN = 0x0;
+ static IntPtr INVALID_HANDLE_VALUE = (IntPtr)(-1);
+ [DllImport("kernel32.dll", EntryPoint="BasepGetExeArchType", CharSet=CharSet.Unicode)]
+ public static extern long BasepGetExeArchType(out ushort pExeType, IntPtr hFile, ref UNICODE_STRING FileName);
+ [DllImport("kernel32.dll", EntryPoint="CreateFileW", CharSet = CharSet.Unicode)]
+ public static extern IntPtr CreateFileW([MarshalAs(UnmanagedType.LPWStr)] string lpFileName,
+ [MarshalAs(UnmanagedType.U4)] FileAccess dwDesiredAccess,
+ [MarshalAs(UnmanagedType.U4)] FileShare dwShareMode,
+ IntPtr lpSecurityAttributes,
+ [MarshalAs(UnmanagedType.U4)] FileMode dwCreationDisposition,
+ [MarshalAs(UnmanagedType.U4)] FileAttributes dwFlagsAndAttributes,
+ IntPtr hTemplateFile);
+ [DllImport("kernel32.dll", EntryPoint="CloseHandle", CharSet = CharSet.Unicode)]
+ public static extern bool CloseHandle(IntPtr Handle);
+ public static ushort GetAppExeType(String AppPath)
+ {
+ IntPtr FileHandle;
+ ushort ExeType = IMAGE_FILE_MACHINE_UNKNOWN;
+ FileHandle = CreateFileW(AppPath,
+ FileAccess.Read,
+ FileShare.Read | FileShare.Delete,
+ IntPtr.Zero,
+ FileMode.Open,
+ FileAttributes.Normal,
+ IntPtr.Zero);
+ if (INVALID_HANDLE_VALUE != FileHandle)
+ {
+ UNICODE_STRING FileName = new UNICODE_STRING(AppPath);
+ ushort TempExeType = IMAGE_FILE_MACHINE_UNKNOWN;
+ long Status;
+ Status = BasepGetExeArchType(out TempExeType, FileHandle, ref FileName);
+ if (Status &gt;= 0)
+ {
+ ExeType = TempExeType;
+ }
+ CloseHandle(FileHandle);
+ }
+ return ExeType;
+ }
+ }"
+ParameterBinding(Add-Type): name="PassThru"; value="True"
+ParameterBinding(Add-Type): name="IgnoreWarnings"; value="True"
+CommandInvocation(Out-Null): "Out-Null"
+</Data>
+</EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">40961</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>4</Task>
+<Opcode>1</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-11-23 07:13:01.780556+00:00"></TimeCreated>
+<EventRecordID>6</EventRecordID>
+<Correlation ActivityID="{d2057fbe-5cb5-0003-15cb-09d2b55cdc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="1132" ThreadID="4820"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-18"></Security>
+</System>
+<EventData></EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">53504</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>111</Task>
+<Opcode>10</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-11-23 07:13:02.713945+00:00"></TimeCreated>
+<EventRecordID>7</EventRecordID>
+<Correlation ActivityID="{d2057fbe-5cb5-0003-15cb-09d2b55cdc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="1132" ThreadID="10000"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-18"></Security>
+</System>
+<EventData><Data Name="param1">1132</Data>
+<Data Name="param2">DefaultAppDomain</Data>
+</EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">40962</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>4</Task>
+<Opcode>2</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-11-23 07:13:03.218479+00:00"></TimeCreated>
+<EventRecordID>8</EventRecordID>
+<Correlation ActivityID="{d2057fbe-5cb5-0003-15cb-09d2b55cdc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="1132" ThreadID="4820"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-18"></Security>
+</System>
+<EventData></EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">40961</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>4</Task>
+<Opcode>1</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-11-23 07:13:05.206684+00:00"></TimeCreated>
+<EventRecordID>9</EventRecordID>
+<Correlation ActivityID="{d2057fbe-5cb5-0001-84f6-0bd2b55cdc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="1888" ThreadID="4080"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-18"></Security>
+</System>
+<EventData></EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">53504</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>111</Task>
+<Opcode>10</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-11-23 07:13:05.883013+00:00"></TimeCreated>
+<EventRecordID>10</EventRecordID>
+<Correlation ActivityID="{d2057fbe-5cb5-0001-84f6-0bd2b55cdc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="1888" ThreadID="8072"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-18"></Security>
+</System>
+<EventData><Data Name="param1">1888</Data>
+<Data Name="param2">DefaultAppDomain</Data>
+</EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">40962</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>4</Task>
+<Opcode>2</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-11-23 07:13:06.622887+00:00"></TimeCreated>
+<EventRecordID>11</EventRecordID>
+<Correlation ActivityID="{d2057fbe-5cb5-0001-84f6-0bd2b55cdc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="1888" ThreadID="4080"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-18"></Security>
+</System>
+<EventData></EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">4104</EventID>
+<Version>1</Version>
+<Level>3</Level>
+<Task>2</Task>
+<Opcode>15</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-11-23 07:13:07.224926+00:00"></TimeCreated>
+<EventRecordID>12</EventRecordID>
+<Correlation ActivityID="{d2057fbe-5cb5-0002-96f9-0ad2b55cdc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="1888" ThreadID="10760"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-18"></Security>
+</System>
+<EventData><Data Name="MessageNumber">1</Data>
+<Data Name="MessageTotal">1</Data>
+<Data Name="ScriptBlockText">
+ $type = @"
+ using System;
+ using System.IO;
+ using System.Runtime.InteropServices;
+ public class Util
+ {
+ [StructLayout(LayoutKind.Sequential, Pack=8)]
+ public struct UNICODE_STRING : IDisposable
+ {
+ public ushort Length;
+ public ushort MaximumLength;
+ private IntPtr buffer;
+ public UNICODE_STRING(string s)
+ {
+ Length = (ushort)(s.Length * 2);
+ MaximumLength = (ushort)(Length + 2);
+ buffer = Marshal.StringToHGlobalUni(s);
+ }
+ public void Dispose()
+ {
+ Marshal.FreeHGlobal(buffer);
+ buffer = IntPtr.Zero;
+ }
+ public override string ToString()
+ {
+ return Marshal.PtrToStringUni(buffer);
+ }
+ }
+ const UInt16 IMAGE_FILE_MACHINE_UNKNOWN = 0x0;
+ static IntPtr INVALID_HANDLE_VALUE = (IntPtr)(-1);
+ [DllImport("kernel32.dll", EntryPoint="BasepGetExeArchType", CharSet=CharSet.Unicode)]
+ public static extern long BasepGetExeArchType(out ushort pExeType, IntPtr hFile, ref UNICODE_STRING FileName);
+ [DllImport("kernel32.dll", EntryPoint="CreateFileW", CharSet = CharSet.Unicode)]
+ public static extern IntPtr CreateFileW([MarshalAs(UnmanagedType.LPWStr)] string lpFileName,
+ [MarshalAs(UnmanagedType.U4)] FileAccess dwDesiredAccess,
+ [MarshalAs(UnmanagedType.U4)] FileShare dwShareMode,
+ IntPtr lpSecurityAttributes,
+ [MarshalAs(UnmanagedType.U4)] FileMode dwCreationDisposition,
+ [MarshalAs(UnmanagedType.U4)] FileAttributes dwFlagsAndAttributes,
+ IntPtr hTemplateFile);
+ [DllImport("kernel32.dll", EntryPoint="CloseHandle", CharSet = CharSet.Unicode)]
+ public static extern bool CloseHandle(IntPtr Handle);
+ public static ushort GetAppExeType(String AppPath)
+ {
+ IntPtr FileHandle;
+ ushort ExeType = IMAGE_FILE_MACHINE_UNKNOWN;
+ FileHandle = CreateFileW(AppPath,
+ FileAccess.Read,
+ FileShare.Read | FileShare.Delete,
+ IntPtr.Zero,
+ FileMode.Open,
+ FileAttributes.Normal,
+ IntPtr.Zero);
+ if (INVALID_HANDLE_VALUE != FileHandle)
+ {
+ UNICODE_STRING FileName = new UNICODE_STRING(AppPath);
+ ushort TempExeType = IMAGE_FILE_MACHINE_UNKNOWN;
+ long Status;
+ Status = BasepGetExeArchType(out TempExeType, FileHandle, ref FileName);
+ if (Status &gt;= 0)
+ {
+ ExeType = TempExeType;
+ }
+ CloseHandle(FileHandle);
+ }
+ return ExeType;
+ }
+ }
+"@
+ Add-Type -TypeDefinition $type -PassThru -IgnoreWarnings | out-null; $res = 0; if(
+ ((test-path $env:windir\system32\concrt140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\concrt140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140chs.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140chs.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140cht.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140cht.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140deu.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140deu.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140enu.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140enu.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140esn.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140esn.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140fra.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140fra.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140ita.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140ita.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140jpn.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140jpn.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140kor.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140kor.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140rus.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140rus.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140u.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140u.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140_1.dll) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140_1.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140_2.dll) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140_2.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140_atomic_wait.dll) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140_atomic_wait.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140_codecvt_ids.dll) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140_codecvt_ids.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\vcamp140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\vcamp140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\vccorlib140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\vccorlib140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\vcomp140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\vcomp140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\vcruntime140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\vcruntime140.dll") -eq 0x8664)
+ ){$res=1}; Write-Host "Final result:", $res
+</Data>
+<Data Name="ScriptBlockId">3366b8a2-e414-4978-9d73-620f8e5073bb</Data>
+<Data Name="Path"></Data>
+</EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">4103</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>106</Task>
+<Opcode>20</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-11-23 07:13:08.366518+00:00"></TimeCreated>
+<EventRecordID>13</EventRecordID>
+<Correlation ActivityID="{d2057fbe-5cb5-0003-11e4-09d2b55cdc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="1888" ThreadID="10760"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-18"></Security>
+</System>
+<EventData><Data Name="ContextInfo">        Severity = Informational
+        Host Name = ConsoleHost
+        Host Version = 5.1.26100.7019
+        Host ID = d7cba5f3-c632-4ef6-8dfd-cd6cad01532d
+        Host Application = powershell.exe -ExecutionPolicy Restricted -Command 
+ $type = @"
+                using System;
+                using System.IO;
+                using System.Runtime.InteropServices;
+                public class Util
+                {
+                    [StructLayout(LayoutKind.Sequential, Pack=8)]
+                    public struct UNICODE_STRING : IDisposable
+                    {
+                        public ushort Length;
+                        public ushort MaximumLength;
+                        private IntPtr buffer;
+                        public UNICODE_STRING(string s)
+                        {
+                            Length = (ushort)(s.Length * 2);
+                            MaximumLength = (ushort)(Length + 2);
+                            buffer = Marshal.StringToHGlobalUni(s);
+                        }
+                        public void Dispose()
+                        {
+                            Marshal.FreeHGlobal(buffer);
+                            buffer = IntPtr.Zero;
+                        }
+                        public override string ToString()
+                        {
+                            return Marshal.PtrToStringUni(buffer);
+                        }
+                    }
+                    const UInt16 IMAGE_FILE_MACHINE_UNKNOWN = 0x0;
+                    static IntPtr INVALID_HANDLE_VALUE    = (IntPtr)(-1);
+                    [DllImport("kernel32.dll", EntryPoint="BasepGetExeArchType", CharSet=CharSet.Unicode)]
+                    public static extern long BasepGetExeArchType(out ushort pExeType, IntPtr hFile, ref UNICODE_STRING FileName);
+                    [DllImport("kernel32.dll", EntryPoint="CreateFileW", CharSet = CharSet.Unicode)]
+                    public static extern IntPtr CreateFileW([MarshalAs(UnmanagedType.LPWStr)] string lpFileName,
+                                                            [MarshalAs(UnmanagedType.U4)] FileAccess dwDesiredAccess,
+                                                            [MarshalAs(UnmanagedType.U4)] FileShare dwShareMode,
+                                                            IntPtr lpSecurityAttributes,
+                                                            [MarshalAs(UnmanagedType.U4)] FileMode dwCreationDisposition,
+                                                            [MarshalAs(UnmanagedType.U4)] FileAttributes dwFlagsAndAttributes,
+                                                            IntPtr hTemplateFile);
+                    [DllImport("kernel32.dll", EntryPoint="CloseHandle", CharSet = CharSet.Unicode)]
+                    public static extern bool CloseHandle(IntPtr Handle);
+                    public static ushort GetAppExeType(String AppPath)
+                    {
+                        IntPtr FileHandle;
+                        ushort ExeType = IMAGE_FILE_MACHINE_UNKNOWN;
+                        FileHandle = CreateFileW(AppPath,
+                                                 FileAccess.Read,
+                                                 FileShare.Read | FileShare.Delete,
+                                                 IntPtr.Zero,
+                                                 FileMode.Open,
+                                                 FileAttributes.Normal,
+                                                 IntPtr.Zero);
+                        if (INVALID_HANDLE_VALUE != FileHandle)
+                        {
+                            UNICODE_STRING FileName = new UNICODE_STRING(AppPath);
+                            ushort TempExeType = IMAGE_FILE_MACHINE_UNKNOWN;
+                            long Status;
+                            Status = BasepGetExeArchType(out TempExeType, FileHandle, ref FileName);
+                            if (Status &gt;= 0)
+                            {
+                                ExeType = TempExeType;
+                            }
+                            CloseHandle(FileHandle);
+                        }
+                        return ExeType;
+                    }
+                }
+"@
+ Add-Type -TypeDefinition $type -PassThru -IgnoreWarnings | out-null; $res = 0; if(
+ ((test-path $env:windir\system32\concrt140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\concrt140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140chs.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140chs.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140cht.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140cht.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140deu.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140deu.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140enu.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140enu.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140esn.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140esn.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140fra.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140fra.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140ita.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140ita.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140jpn.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140jpn.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140kor.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140kor.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140rus.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140rus.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\mfc140u.dll ) -and [Util]::GetAppExeType("$env:windir\system32\mfc140u.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140_1.dll) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140_1.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140_2.dll) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140_2.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140_atomic_wait.dll) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140_atomic_wait.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\msvcp140_codecvt_ids.dll) -and [Util]::GetAppExeType("$env:windir\system32\msvcp140_codecvt_ids.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\vcamp140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\vcamp140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\vccorlib140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\vccorlib140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\vcomp140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\vcomp140.dll") -eq 0x8664) -or
+ ((test-path $env:windir\system32\vcruntime140.dll ) -and [Util]::GetAppExeType("$env:windir\system32\vcruntime140.dll") -eq 0x8664)
+ ){$res=1}; Write-Host "Final result:", $res
+
+        Engine Version = 5.1.26100.7019
+        Runspace ID = 48cbea3e-6b08-4153-921c-c69c86663ebd
+        Pipeline ID = 1
+        Command Name = Add-Type
+        Command Type = Cmdlet
+        Script Name = 
+        Command Path = 
+        Sequence Number = 28
+        User = WORKGROUP\SYSTEM
+        Connected User = 
+        Shell ID = Microsoft.PowerShell
+</Data>
+<Data Name="UserData"></Data>
+<Data Name="Payload">CommandInvocation(Add-Type): "Add-Type"
+ParameterBinding(Add-Type): name="TypeDefinition"; value=" using System;
+ using System.IO;
+ using System.Runtime.InteropServices;
+ public class Util
+ {
+ [StructLayout(LayoutKind.Sequential, Pack=8)]
+ public struct UNICODE_STRING : IDisposable
+ {
+ public ushort Length;
+ public ushort MaximumLength;
+ private IntPtr buffer;
+ public UNICODE_STRING(string s)
+ {
+ Length = (ushort)(s.Length * 2);
+ MaximumLength = (ushort)(Length + 2);
+ buffer = Marshal.StringToHGlobalUni(s);
+ }
+ public void Dispose()
+ {
+ Marshal.FreeHGlobal(buffer);
+ buffer = IntPtr.Zero;
+ }
+ public override string ToString()
+ {
+ return Marshal.PtrToStringUni(buffer);
+ }
+ }
+ const UInt16 IMAGE_FILE_MACHINE_UNKNOWN = 0x0;
+ static IntPtr INVALID_HANDLE_VALUE = (IntPtr)(-1);
+ [DllImport("kernel32.dll", EntryPoint="BasepGetExeArchType", CharSet=CharSet.Unicode)]
+ public static extern long BasepGetExeArchType(out ushort pExeType, IntPtr hFile, ref UNICODE_STRING FileName);
+ [DllImport("kernel32.dll", EntryPoint="CreateFileW", CharSet = CharSet.Unicode)]
+ public static extern IntPtr CreateFileW([MarshalAs(UnmanagedType.LPWStr)] string lpFileName,
+ [MarshalAs(UnmanagedType.U4)] FileAccess dwDesiredAccess,
+ [MarshalAs(UnmanagedType.U4)] FileShare dwShareMode,
+ IntPtr lpSecurityAttributes,
+ [MarshalAs(UnmanagedType.U4)] FileMode dwCreationDisposition,
+ [MarshalAs(UnmanagedType.U4)] FileAttributes dwFlagsAndAttributes,
+ IntPtr hTemplateFile);
+ [DllImport("kernel32.dll", EntryPoint="CloseHandle", CharSet = CharSet.Unicode)]
+ public static extern bool CloseHandle(IntPtr Handle);
+ public static ushort GetAppExeType(String AppPath)
+ {
+ IntPtr FileHandle;
+ ushort ExeType = IMAGE_FILE_MACHINE_UNKNOWN;
+ FileHandle = CreateFileW(AppPath,
+ FileAccess.Read,
+ FileShare.Read | FileShare.Delete,
+ IntPtr.Zero,
+ FileMode.Open,
+ FileAttributes.Normal,
+ IntPtr.Zero);
+ if (INVALID_HANDLE_VALUE != FileHandle)
+ {
+ UNICODE_STRING FileName = new UNICODE_STRING(AppPath);
+ ushort TempExeType = IMAGE_FILE_MACHINE_UNKNOWN;
+ long Status;
+ Status = BasepGetExeArchType(out TempExeType, FileHandle, ref FileName);
+ if (Status &gt;= 0)
+ {
+ ExeType = TempExeType;
+ }
+ CloseHandle(FileHandle);
+ }
+ return ExeType;
+ }
+ }"
+ParameterBinding(Add-Type): name="PassThru"; value="True"
+ParameterBinding(Add-Type): name="IgnoreWarnings"; value="True"
+CommandInvocation(Out-Null): "Out-Null"
+</Data>
+</EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">40961</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>4</Task>
+<Opcode>1</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-11-23 07:13:09.055117+00:00"></TimeCreated>
+<EventRecordID>14</EventRecordID>
+<Correlation ActivityID="{d2057fbe-5cb5-0003-2ee5-09d2b55cdc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="5556" ThreadID="7980"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-18"></Security>
+</System>
+<EventData></EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">53504</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>111</Task>
+<Opcode>10</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-11-23 07:13:09.476910+00:00"></TimeCreated>
+<EventRecordID>15</EventRecordID>
+<Correlation ActivityID="{d2057fbe-5cb5-0003-2ee5-09d2b55cdc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="5556" ThreadID="4504"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-18"></Security>
+</System>
+<EventData><Data Name="param1">5556</Data>
+<Data Name="param2">DefaultAppDomain</Data>
+</EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">40962</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>4</Task>
+<Opcode>2</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-11-23 07:13:09.827915+00:00"></TimeCreated>
+<EventRecordID>16</EventRecordID>
+<Correlation ActivityID="{d2057fbe-5cb5-0003-2ee5-09d2b55cdc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="5556" ThreadID="7980"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-18"></Security>
+</System>
+<EventData></EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">40961</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>4</Task>
+<Opcode>1</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-12-04 08:48:49.328829+00:00"></TimeCreated>
+<EventRecordID>17</EventRecordID>
+<Correlation ActivityID="{6955a40f-656d-0003-a0b3-56696d65dc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="4544" ThreadID="8712"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-21-3406557415-3785955325-3440082762-1001"></Security>
+</System>
+<EventData></EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">53504</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>111</Task>
+<Opcode>10</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-12-04 08:48:49.647449+00:00"></TimeCreated>
+<EventRecordID>18</EventRecordID>
+<Correlation ActivityID="{6955a40f-656d-0003-a0b3-56696d65dc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="4544" ThreadID="8760"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-21-3406557415-3785955325-3440082762-1001"></Security>
+</System>
+<EventData><Data Name="param1">4544</Data>
+<Data Name="param2">DefaultAppDomain</Data>
+</EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">40962</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>4</Task>
+<Opcode>2</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-12-04 08:48:50.736387+00:00"></TimeCreated>
+<EventRecordID>19</EventRecordID>
+<Correlation ActivityID="{6955a40f-656d-0003-a0b3-56696d65dc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="4544" ThreadID="8712"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-21-3406557415-3785955325-3440082762-1001"></Security>
+</System>
+<EventData></EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">40961</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>4</Task>
+<Opcode>1</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-12-04 08:55:12.373743+00:00"></TimeCreated>
+<EventRecordID>20</EventRecordID>
+<Correlation ActivityID="{6955a40f-656d-0002-1ff5-56696d65dc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="10624" ThreadID="4820"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-21-3406557415-3785955325-3440082762-1001"></Security>
+</System>
+<EventData></EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">53504</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>111</Task>
+<Opcode>10</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-12-04 08:55:12.555824+00:00"></TimeCreated>
+<EventRecordID>21</EventRecordID>
+<Correlation ActivityID="{6955a40f-656d-0002-1ff5-56696d65dc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="10624" ThreadID="7044"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-21-3406557415-3785955325-3440082762-1001"></Security>
+</System>
+<EventData><Data Name="param1">10624</Data>
+<Data Name="param2">DefaultAppDomain</Data>
+</EventData>
+</Event>
+
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Provider Name="Microsoft-Windows-PowerShell" Guid="{a0c1853b-5c40-4b15-8766-3cf1c58f985a}"></Provider>
+<EventID Qualifiers="">40962</EventID>
+<Version>1</Version>
+<Level>4</Level>
+<Task>4</Task>
+<Opcode>2</Opcode>
+<Keywords>0x0000000000000000</Keywords>
+<TimeCreated SystemTime="2025-12-04 08:55:13.093130+00:00"></TimeCreated>
+<EventRecordID>22</EventRecordID>
+<Correlation ActivityID="{6955a40f-656d-0002-1ff5-56696d65dc01}" RelatedActivityID=""></Correlation>
+<Execution ProcessID="10624" ThreadID="4820"></Execution>
+<Channel>Microsoft-Windows-PowerShell/Operational</Channel>
+<Computer>WIN-QCM4OJM0UCK</Computer>
+<Security UserID="S-1-5-21-3406557415-3785955325-3440082762-1001"></Security>
+</System>
+<EventData></EventData>
+</Event>
+

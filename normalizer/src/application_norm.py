@@ -1,19 +1,3 @@
-# =============================================================================
-# Application Channel Event Normalizer
-# =============================================================================
-# Handles normalization of Windows Application event logs.
-#
-# Application logs contain:
-#   - Software application errors and warnings
-#   - Application lifecycle events (start, stop, crash)
-#   - Custom application-specific messages
-#
-# Normalization steps:
-#   1. Convert event_id from string to integer
-#   2. Clean event_data by removing XML namespaces
-#   3. Extract string values from XML tags
-# =============================================================================
-
 from .utils import clean_event_data
 
 

@@ -1,0 +1,10 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    container_name: fyp-api
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data

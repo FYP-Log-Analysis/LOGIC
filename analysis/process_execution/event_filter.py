@@ -33,7 +33,7 @@ for event in events:
     if not process_name or not timestamp:
         continue
 
-    # Build a clean record with just the fields we care about
+    # Build a clean record with just the fields we want
     filtered_events.append({
         "timestamp": timestamp,
         "computer": event.get("computer"),

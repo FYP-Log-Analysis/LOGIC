@@ -10,7 +10,7 @@ COPY ../api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the API code
-COPY ../api .
+COPY ../api /app
 
 # Start FastAPI
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

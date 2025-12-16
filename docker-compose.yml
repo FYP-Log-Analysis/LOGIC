@@ -5,7 +5,7 @@ services:
       dockerfile: docker/api.Dockerfile
     container_name: fyp-api
     ports:
-      - "5000:5000"
+      - "4000:4000"
     volumes:
       - ./data:/app/data
     depends_on:

@@ -9,7 +9,6 @@ const STAGES = [
   { key: "uploading", label: "Uploading" },
   { key: "parsing", label: "Parsing" },
   { key: "normalizing", label: "Normalizing" },
-  { key: "detecting", label: "Detecting Threats" },
   { key: "saved", label: "Saved" },
 ];
 

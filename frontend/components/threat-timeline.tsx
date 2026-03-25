@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 export interface ThreatEvent {
   timestamp: string;
@@ -9,12 +9,14 @@ export interface ThreatEvent {
   title: string;
   details?: string;
   source?: string;
+  payload?: unknown;
 }
 
 export interface ThreatTimelineProps {
   events: ThreatEvent[];
   onEventClick?: (event: ThreatEvent) => void;
   height?: number;
+  emptyState?: ReactNode;
 }
 
 const severityColors: Record<string, string> = {
@@ -23,14 +25,7 @@ const severityColors: Record<string, string> = {
   critical: "#ef5350",
 };
 
-const severityOrder: Record<string, number> = {
-  critical: 3,
-  warning: 2,
-  info: 1,
-};
-
-export function ThreatTimeline({ events, onEventClick, height = 300 }: ThreatTimelineProps) {
-  const [selectedEvent, setSelectedEvent] = useState<ThreatEvent | null>(null);
+export function ThreatTimeline({ events, onEventClick, height = 300, emptyState }: ThreatTimelineProps) {
   const [filterSeverity, setFilterSeverity] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string | null>(null);
 
@@ -53,19 +48,13 @@ export function ThreatTimeline({ events, onEventClick, height = 300 }: ThreatTim
           borderRadius: "4px",
         }}
       >
-        No threat events in this timeline
+        {emptyState ?? "No threat events in this timeline"}
       </div>
     );
   }
-
-  // Sort events by timestamp for display
   const sortedEvents = [...filteredEvents].sort(
-    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
-
-  const minTime = sortedEvents.length > 0 ? new Date(sortedEvents[0].timestamp).getTime() : Date.now();
-  const maxTime = sortedEvents.length > 0 ? new Date(sortedEvents[sortedEvents.length - 1].timestamp).getTime() : Date.now();
-  const timeRange = maxTime - minTime || 1;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -136,72 +125,77 @@ export function ThreatTimeline({ events, onEventClick, height = 300 }: ThreatTim
       <div
         style={{
           height: `${height}px`,
-          position: "relative",
-          background: "#1a1a1a",
+          overflowY: "auto",
+          background: "#0d0d0d",
           border: "1px solid #222",
           borderRadius: "4px",
           padding: "12px",
-          display: "flex",
-          alignItems: "center",
         }}
       >
-        {/* Horizontal line */}
-        <div
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "12px",
-            right: "12px",
-            height: "2px",
-            background: "#333",
-            transform: "translateY(-50%)",
-          }}
-        />
+        <div style={{ position: "relative", minHeight: "100%", paddingLeft: "22px" }}>
+          <div
+            style={{
+              position: "absolute",
+              left: "8px",
+              top: 0,
+              bottom: 0,
+              width: "2px",
+              background: "#2f2f2f",
+            }}
+          />
 
-        {/* Events */}
-        <div style={{ position: "relative", width: "100%", height: "100%" }}>
-          {sortedEvents.map((event, idx) => {
-            const eventTime = new Date(event.timestamp).getTime();
-            const position = timeRange > 0 ? ((eventTime - minTime) / timeRange) * 90 + 5 : 50;
-
-            return (
-              <div
-                key={idx}
-                onClick={() => {
-                  setSelectedEvent(event);
-                  onEventClick?.(event);
-                }}
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            {sortedEvents.map((event, idx) => (
+              <button
+                key={`${event.timestamp}_${event.title}_${idx}`}
+                onClick={() => onEventClick?.(event)}
                 style={{
-                  position: "absolute",
-                  left: `${position}%`,
-                  top: "50%",
-                  transform: "translate(-50%, -50%)",
+                  border: "1px solid #1f1f1f",
+                  background: "#111",
+                  borderRadius: "4px",
+                  color: "inherit",
                   cursor: "pointer",
-                  zIndex: severityOrder[event.severity],
-                }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.transform =
-                    "translate(-50%, -50%) scale(1.3)";
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.transform =
-                    "translate(-50%, -50%)";
+                  textAlign: "left",
+                  padding: "10px 10px 10px 12px",
+                  position: "relative",
                 }}
               >
-                <div
+                <span
                   style={{
+                    position: "absolute",
+                    left: "-20px",
+                    top: "14px",
                     width: "12px",
                     height: "12px",
                     borderRadius: "50%",
                     background: severityColors[event.severity],
-                    border: `2px solid ${selectedEvent === event ? "#fff" : "#0d0d0d"}`,
+                    border: "2px solid #0d0d0d",
                     boxShadow: `0 0 8px ${severityColors[event.severity]}`,
-                    transition: "all 0.15s",
                   }}
                 />
-              </div>
-            );
-          })}
+
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px", flexWrap: "wrap" }}>
+                  <span style={{ color: severityColors[event.severity], fontSize: "10px", letterSpacing: "0.6px", textTransform: "uppercase", fontWeight: 700 }}>
+                    {event.severity}
+                  </span>
+                  <span style={{ color: "#777", fontSize: "10px", letterSpacing: "0.6px", textTransform: "uppercase" }}>
+                    {event.type}
+                  </span>
+                  <span style={{ color: "#666", fontSize: "10px" }}>
+                    {new Date(event.timestamp).toLocaleString()}
+                  </span>
+                </div>
+                <div style={{ color: "#cfcfcf", fontSize: "12px", marginBottom: event.details ? "4px" : 0 }}>
+                  {event.title}
+                </div>
+                {event.details && (
+                  <div style={{ color: "#888", fontSize: "10px", lineHeight: 1.4 }}>
+                    {event.details}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -210,61 +204,11 @@ export function ThreatTimeline({ events, onEventClick, height = 300 }: ThreatTim
         <span>{filteredEvents.length} event(s) in range</span>
         {sortedEvents.length > 0 && (
           <>
-            <span>First: {new Date(sortedEvents[0].timestamp).toLocaleString()}</span>
-            <span>Last: {new Date(sortedEvents[sortedEvents.length - 1].timestamp).toLocaleString()}</span>
+            <span>Latest: {new Date(sortedEvents[0].timestamp).toLocaleString()}</span>
+            <span>Oldest: {new Date(sortedEvents[sortedEvents.length - 1].timestamp).toLocaleString()}</span>
           </>
         )}
       </div>
-
-      {/* Selected event details */}
-      {selectedEvent && (
-        <div
-          style={{
-            padding: "12px",
-            background: "#1a1a1a",
-            border: `2px solid ${severityColors[selectedEvent.severity]}`,
-            borderRadius: "4px",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "8px" }}>
-            <div>
-              <div style={{ color: severityColors[selectedEvent.severity], fontWeight: "bold", fontSize: "12px" }}>
-                {selectedEvent.severity.toUpperCase()} — {selectedEvent.type.toUpperCase()}
-              </div>
-              <div style={{ color: "#aaa", fontSize: "10px", marginTop: "2px" }}>
-                {new Date(selectedEvent.timestamp).toLocaleString()}
-              </div>
-            </div>
-            <button
-              onClick={() => setSelectedEvent(null)}
-              style={{
-                background: "#333",
-                border: "1px solid #555",
-                color: "#aaa",
-                padding: "2px 6px",
-                fontSize: "10px",
-                cursor: "pointer",
-                borderRadius: "2px",
-              }}
-            >
-              Close
-            </button>
-          </div>
-          <div style={{ color: "#ccc", fontSize: "11px", marginBottom: "6px" }}>
-            {selectedEvent.title}
-          </div>
-          {selectedEvent.details && (
-            <div style={{ color: "#888", fontSize: "10px", marginBottom: "6px", lineHeight: "1.4" }}>
-              {selectedEvent.details}
-            </div>
-          )}
-          {selectedEvent.source && (
-            <div style={{ color: "#666", fontSize: "9px" }}>
-              Source: {selectedEvent.source}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

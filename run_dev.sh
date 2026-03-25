@@ -56,73 +56,16 @@ if [ -f ".env" ]; then
     set +o allexport
     ok ".env loaded"
 else
-    warn ".env not found — using defaults. Copy .env.example if available."
+    echo -e "${RED}[FATAL]${NC} .env file not found. Create .env in the project root before running dev."
+    exit 1
 fi
 
 # ── 4. Ensure active data directories exist ──────────────────────────────────
 mkdir -p data/crs_audit data/crs_rules data/projects
 
-# ── 5. Start CRS detection container (requires Docker) ───────────────────────
-CRS_PID=""
-if command -v docker &>/dev/null; then
-    log "Starting CRS detector container (logic-crs-detector) …"
-    crs_started=0
-    expected_audit_mount="$SCRIPT_DIR/data/crs_audit"
-    expected_rules_mount="$SCRIPT_DIR/data/crs_rules"
-
-    # Reuse the existing named container when it already exists.
-    if docker container inspect logic-crs-detector >/dev/null 2>&1; then
-        audit_mount_source="$(docker inspect logic-crs-detector --format '{{range .Mounts}}{{if eq .Destination "/var/log/modsec"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)"
-        rules_mount_source="$(docker inspect logic-crs-detector --format '{{range .Mounts}}{{if eq .Destination "/etc/modsecurity.d/owasp-crs/rules/z_custom-rules"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)"
-
-        if [ "$audit_mount_source" != "$expected_audit_mount" ] || [ "$rules_mount_source" != "$expected_rules_mount" ]; then
-            warn "Existing logic-crs-detector container has stale mount paths; recreating for this workspace."
-            docker rm -f logic-crs-detector >/dev/null 2>&1 || true
-            compose_err=""
-            if compose_err=$(docker compose up -d crs-detector 2>&1); then
-                crs_started=1
-            elif compose_err=$(docker-compose up -d crs-detector 2>&1); then
-                crs_started=1
-            else
-                warn "Could not recreate CRS detector."
-                warn "Docker error: ${compose_err}"
-            fi
-        elif docker start logic-crs-detector >/dev/null 2>&1 || docker ps --format '{{.Names}}' | grep -q '^logic-crs-detector$'; then
-            crs_started=1
-        fi
-    else
-        compose_err=""
-        if compose_err=$(docker compose up -d crs-detector 2>&1); then
-            crs_started=1
-        elif compose_err=$(docker-compose up -d crs-detector 2>&1); then
-            crs_started=1
-        else
-            warn "Could not start CRS detector."
-            warn "Docker error: ${compose_err}"
-        fi
-    fi
-
-    if [ "$crs_started" -eq 1 ]; then
-        crs_reachable=0
-        # Wait for nginx inside the container to become ready
-        for i in 1 2 3 4 5; do
-            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 1 http://localhost:8080/ || true)"
-            if [ "$code" != "000" ]; then
-                crs_reachable=1
-                break
-            fi
-            sleep 1
-        done
-        if [ "$crs_reachable" -eq 1 ]; then
-            ok "CRS detector reachable at http://localhost:8080 (HTTP ${code})"
-            export CRS_SERVICE_URL="${CRS_SERVICE_URL:-http://localhost:8080}"
-        else
-            warn "CRS container started but is not reachable at http://localhost:8080"
-        fi
-    fi
-else
-    warn "Docker not found — CRS detection is unavailable in local dev."
-fi
+# ── 5. CRS URL (external optional service, no Docker orchestration here) ─────
+export CRS_SERVICE_URL="${CRS_SERVICE_URL:-http://localhost:8080}"
+warn "Assuming CRS service at ${CRS_SERVICE_URL}. Start it separately if needed."
 
 # ── 6. Set PYTHONPATH so both api/ and root modules are importable ─────────────
 export PYTHONPATH="$SCRIPT_DIR"
@@ -181,10 +124,6 @@ trap '
     log "Stopping services …"
     kill $API_PID ${DASH_PID:-} 2>/dev/null
     wait 2>/dev/null
-    if command -v docker &>/dev/null; then
-        log "Stopping CRS detector container …"
-        docker compose stop crs-detector 2>/dev/null || docker-compose stop crs-detector 2>/dev/null
-    fi
     ok "Done."
 ' INT TERM
 wait

@@ -13,8 +13,6 @@ services:
         required: false           # won't fail if .env doesn't exist yet
     environment:
       - PYTHONPATH=/app
-      - LM_STUDIO_BASE_URL=${LM_STUDIO_BASE_URL:-http://host.docker.internal:1234/v1}
-      - LM_STUDIO_MODEL=${LM_STUDIO_MODEL:-local-model}
       # GROQ_API_KEY is loaded from .env via env_file above — do NOT duplicate here
       # as an empty shell var would silently override the .env value.
       # CRS INTEGRATION: URL of the ModSecurity CRS detection service (nginx listens on 8080)
@@ -87,6 +85,7 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-logic1234}
+      - LOGIC_API_URL=http://api:4000
       - GF_INSTALL_PLUGINS=yesoreyeram-infinity-datasource
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer

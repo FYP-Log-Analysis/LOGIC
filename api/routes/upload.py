@@ -88,8 +88,6 @@ def _ingest_and_normalise(
 ) -> None:
     from core.ingestion.ingest_logs import ingest_all
     from core.processor.process_logs import process_all
-    from core.detection.rule_pipeline import run_rule_pipeline_from_file
-    from core.behavioral.windows_ml import run_windows_ml_analysis
 
     try:
         # Stage 1 — Parsing (ingestion reads raw files → per-upload intermediate.json)
@@ -113,51 +111,8 @@ def _ingest_and_normalise(
         _log(upload_id, f"Normalized {entry_count:,} entries → stored behavioral aggregations")
         update_upload_status(upload_id, stage="normalizing", status="complete", entry_count=entry_count)
 
-        # Stage 3 — Rule-based Detection (CRS service)
-        update_upload_status(upload_id, stage="detecting", status="running")
-        _log(upload_id, "Running threat detection…")
-        norm_path = PROJECTS_DIR / project_id / "uploads" / upload_id / "normalized.json"
-        if norm_path.exists():
-            result = run_rule_pipeline_from_file(
-                norm_path, project_id=project_id, upload_id=upload_id,
-            )
-            crs_count = result.get("crs_matches", 0)
-            total_matches = result.get("total_matches", 0)
-            _log(upload_id, f"Detection complete — {total_matches} rule matches ({crs_count} CRS)")
-        else:
-            _log(upload_id, "Skipped rule detection — normalized file not found")
-
-        # Stage 4 — Behavioral Analysis (auto-trigger so the Behavioral page has data)
-        try:
-            from core.behavioral.behavioral import run_behavioral_analysis
-            _log(upload_id, "Running behavioral analysis…")
-            beh_result = run_behavioral_analysis(project_id=project_id)
-            beh_summary = beh_result.get("summary", {})
-            _log(
-                upload_id,
-                f"Behavioral analysis complete — "
-                f"{beh_summary.get('total_rate_spike_windows', 0)} rate spikes, "
-                f"{beh_summary.get('total_enumeration_alerts', 0)} enumerators, "
-                f"{beh_summary.get('total_status_spike_windows', 0)} status spikes"
-            )
-        except Exception as beh_exc:
-            _log(upload_id, f"Behavioral analysis skipped: {beh_exc}")
-            logger.warning(f"Behavioral analysis failed for upload {upload_id}: {beh_exc}")
-
-        # Stage 5 - Windows ML anomaly analysis (safe no-op if no windows events)
-        try:
-            _log(upload_id, "Running Windows anomaly analysis...")
-            ml_result = run_windows_ml_analysis(project_id=project_id, upload_id=upload_id)
-            _log(
-                upload_id,
-                f"Windows anomaly analysis complete - {ml_result.get('anomalous_windows', 0)} anomalous windows",
-            )
-        except Exception as ml_exc:
-            _log(upload_id, f"Windows anomaly analysis skipped: {ml_exc}")
-            logger.warning(f"Windows ML analysis failed for upload {upload_id}: {ml_exc}")
-
-        # Done
-        _log(upload_id, f"Pipeline complete — {entry_count:,} entries ready for analysis")
+        _log(upload_id, "Detection and ML stages are manual and were not executed during upload")
+        _log(upload_id, f"Pipeline complete — {entry_count:,} entries parsed and normalized")
         update_upload_status(
             upload_id,
             stage="saved",

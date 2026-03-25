@@ -17,8 +17,9 @@ import {
   Divider,
   Badge,
 } from "@/components/ui-primitives";
-import LineChart from "@/components/charts/line-chart";
 import BarChart from "@/components/charts/bar-chart";
+import { ThreatTimeline, type ThreatEvent } from "@/components/threat-timeline";
+import { EventDetailModal } from "@/components/event-detail-modal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -83,11 +84,6 @@ function severityColor(sev?: string): string {
   }
 }
 
-function hourBucket(ts?: string): string {
-  if (!ts) return "Unknown";
-  try { return ts.substring(0, 13); } catch { return "Unknown"; }
-}
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ThreatActorPage() {
@@ -99,6 +95,7 @@ export default function ThreatActorPage() {
   const [ipProfile, setIpProfile] = useState<IpProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [selectedTimelineEvent, setSelectedTimelineEvent] = useState<ThreatEvent | null>(null);
 
   const { activeProject, timeRange } = useAuthStore();
   const scope = { projectId: activeProject?.id, startTs: timeRange?.from, endTs: timeRange?.to };
@@ -153,14 +150,25 @@ export default function ThreatActorPage() {
 
   const attackCategories = [...new Set(ipMatches.map((m) => getCrsCategory(m.rule_id, m.rule_title)))];
 
-  // Hourly timeline
-  const hourlyBuckets = ipMatches.reduce<Record<string, number>>((acc, m) => {
-    const h = hourBucket(m.timestamp);
-    acc[h] = (acc[h] ?? 0) + 1;
-    return acc;
-  }, {});
-  const timelineLabels = Object.keys(hourlyBuckets).sort();
-  const timelineData = timelineLabels.map((h) => hourlyBuckets[h]);
+  const timelineEvents: ThreatEvent[] = ipMatches.map((match) => {
+    const sev = (match.severity ?? "low").toLowerCase();
+    const severity: ThreatEvent["severity"] =
+      sev === "critical" || sev === "high"
+        ? "critical"
+        : sev === "medium"
+          ? "warning"
+          : "info";
+
+    return {
+      timestamp: match.timestamp || new Date().toISOString(),
+      severity,
+      type: "detection",
+      title: match.rule_title || match.rule_id || "Rule match",
+      details: `${match.client_ip || "unknown ip"} | ${match.method || "-"} ${match.path || "-"} | status ${match.status_code || "-"}`,
+      source: "threat-actor",
+      payload: match,
+    };
+  });
 
   // Behavioral coverage
   const behRateSpikes = (behResults.request_rate_spikes ?? []).filter(
@@ -379,24 +387,18 @@ export default function ThreatActorPage() {
             </div>
           </div>
 
-          {/* Attack Timeline */}
-          {timelineLabels.length > 0 && (
-            <div style={{ background: "#1a1a2e", border: "1px solid #2d2d4e", borderRadius: 10, padding: "16px 20px", marginBottom: 24 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#8b8fa8", marginBottom: 12, textTransform: "uppercase", letterSpacing: 1 }}>
-                Attack Timeline (Hourly)
-              </div>
-              <LineChart
-                labels={timelineLabels}
-                datasets={[{
-                  label: "Rule Matches",
-                  data: timelineData,
-                  color: "#7c3aed",
-                  fill: true,
-                }]}
-                yLabel="Matches"
-              />
+          {/* Detection Timeline */}
+          <div style={{ background: "#1a1a2e", border: "1px solid #2d2d4e", borderRadius: 10, padding: "16px 20px", marginBottom: 24 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#8b8fa8", marginBottom: 12, textTransform: "uppercase", letterSpacing: 1 }}>
+              Threat Timeline
             </div>
-          )}
+            <ThreatTimeline
+              events={timelineEvents}
+              height={300}
+              onEventClick={(event) => setSelectedTimelineEvent(event)}
+              emptyState="No detection events for this IP in the selected scope"
+            />
+          </div>
 
           {/* Rules Triggered & Top Paths */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
@@ -502,6 +504,15 @@ export default function ThreatActorPage() {
             <Btn onClick={exportProfile}>Export Profile JSON</Btn>
           </div>
         </>
+      )}
+
+      {selectedTimelineEvent && (
+        <EventDetailModal
+          title={selectedTimelineEvent.title}
+          subtitle={`${selectedTimelineEvent.severity.toUpperCase()} · ${selectedTimelineEvent.type.toUpperCase()} · ${new Date(selectedTimelineEvent.timestamp).toLocaleString()}`}
+          payload={selectedTimelineEvent.payload ?? selectedTimelineEvent}
+          onClose={() => setSelectedTimelineEvent(null)}
+        />
       )}
     </div>
   );

@@ -7,7 +7,7 @@
 #   ./run_prod.sh
 #
 # Prerequisites:
-#   • Copy .env.example → .env and fill in ALL values (JWT_SECRET_KEY, GROQ_API_KEY …)
+#   • Ensure .env exists and fill in required values (JWT_SECRET_KEY, GROQ_API_KEY …)
 #   • Python 3.11+ and pip available in PATH
 #   • (Optional) Run behind Nginx for HTTPS — see README.md production section
 #
@@ -44,7 +44,7 @@ if [ -f ".env" ]; then
     set +o allexport
     ok ".env loaded"
 else
-    die ".env file not found. Copy .env.example to .env and fill in all values."
+    die ".env file not found. Create .env in the project root and fill in all required values."
 fi
 
 # ── 2. Validate required env vars ─────────────────────────────────────────────

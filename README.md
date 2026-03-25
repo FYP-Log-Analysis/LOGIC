@@ -28,10 +28,8 @@ It includes:
 
 ### Start
 
-1. Copy environment template:
-   - `cp .env.example .env`
-2. Update at least `JWT_SECRET_KEY` in `.env`
-3. Run:
+1. Ensure `.env` exists at project root and set at least `JWT_SECRET_KEY`.
+2. Run:
    - `./run_dev.sh`
 
 Services:
@@ -39,16 +37,19 @@ Services:
 - Frontend: `http://localhost:3000`
 - API: `http://localhost:4000`
 - API docs: `http://localhost:4000/docs`
+- Grafana (optional local): `http://localhost:3002` via `./run_grafana.sh`
 
 ## Production (No Docker)
 
-1. Copy env template:
-   - `cp .env.example .env`
-2. Set strong secrets (`JWT_SECRET_KEY`, `GRAFANA_PASSWORD`) and production origins (`ALLOWED_ORIGINS`)
-3. Run:
+1. Ensure `.env` is present and set strong secrets (`JWT_SECRET_KEY`, `GRAFANA_PASSWORD`) plus production origins (`ALLOWED_ORIGINS`).
+2. Run:
    - `./run_prod.sh`
 
 `run_prod.sh` runs FastAPI with 2 workers and Next.js in production mode.
+
+Local Grafana (without Docker) can be started separately with:
+
+- `./run_grafana.sh`
 
 ## Production (Docker Compose)
 

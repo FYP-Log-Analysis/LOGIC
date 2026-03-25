@@ -132,6 +132,24 @@ def grafana_health() -> str:
     return "OK"
 
 
+@grafana.get("/overview")
+def grafana_overview(project_id: str | None = Query(None)) -> dict[str, Any]:
+    """Public read-only payload for Grafana dashboards."""
+    return get_overview_stats(project_id=project_id)
+
+
+@grafana.get("/detection-aggregations")
+def grafana_detection_aggregations(project_id: str | None = Query(None)) -> dict[str, Any]:
+    """Public read-only detection aggregations for Grafana."""
+    return get_detection_aggregations(project_id=project_id)
+
+
+@grafana.get("/log-statistics")
+def grafana_log_statistics(project_id: str | None = Query(None)) -> dict[str, Any]:
+    """Public read-only log statistics for Grafana."""
+    return get_log_statistics(project_id=project_id)
+
+
 @grafana.post("/search")
 def grafana_search() -> list[str]:
     return [

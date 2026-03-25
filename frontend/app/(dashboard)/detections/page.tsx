@@ -16,6 +16,8 @@ import BarChart from "@/components/charts/bar-chart";
 import PieChart from "@/components/charts/pie-chart";
 import LineChart from "@/components/charts/line-chart";
 import HawkinsChat from "@/components/hawkins-chat";
+import { ThreatTimeline, type ThreatEvent } from "@/components/threat-timeline";
+import { EventDetailModal } from "@/components/event-detail-modal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -420,6 +422,7 @@ export default function DetectionsPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("Overview Charts");
   const [triageMap, setTriageMap] = useState<Record<string, TriageStatus>>({});
+  const [selectedTimelineEvent, setSelectedTimelineEvent] = useState<ThreatEvent | null>(null);
   const { activeProject, timeRange } = useAuthStore();
   const scope = { projectId: activeProject?.id, startTs: timeRange?.from, endTs: timeRange?.to };
 
@@ -499,6 +502,26 @@ export default function DetectionsPage() {
     Object.keys(agg.hourly_timeline).length > 0
   );
 
+  const timelineEvents: ThreatEvent[] = matches.map((match) => {
+    const sev = (match.severity ?? "low").toLowerCase();
+    const severity: ThreatEvent["severity"] =
+      sev === "critical" || sev === "high"
+        ? "critical"
+        : sev === "medium"
+          ? "warning"
+          : "info";
+
+    return {
+      timestamp: match.timestamp || new Date().toISOString(),
+      severity,
+      type: "detection",
+      title: match.rule_title || match.rule_id || "Rule match",
+      details: `${match.client_ip || "unknown ip"} | ${match.method || "-"} ${match.path || "-"} | status ${match.status_code || "-"}`,
+      source: "rule-detection",
+      payload: match,
+    };
+  });
+
   return (
     <div>
       <SectionHeader
@@ -538,7 +561,16 @@ export default function DetectionsPage() {
       )}
       {tab === "Overview Charts" && agg && hasOverviewData && <OverviewCharts agg={agg} />}
       {tab === "Detected Threats" && (
-        <ThreatTable matches={matches} triageMap={triageMap} onTriageChange={handleTriageChange} />
+        <>
+          <div style={{ marginBottom: 16 }}>
+            <ThreatTimeline
+              events={timelineEvents}
+              height={280}
+              onEventClick={(event) => setSelectedTimelineEvent(event)}
+            />
+          </div>
+          <ThreatTable matches={matches} triageMap={triageMap} onTriageChange={handleTriageChange} />
+        </>
       )}
 
       <div style={{ marginTop: 40 }}>
@@ -550,6 +582,15 @@ export default function DetectionsPage() {
           helpGuide="Try: 'Which IPs are most suspicious?' or 'Explain the SQL injection alerts'. Use the Triage column to mark alerts as Investigating or Resolved — status persists in your browser. Toggle Successful Hits to see attacks that may have landed (server returned 2xx). Export CSV sends the current filtered view to your downloads folder."
         />
       </div>
+
+      {selectedTimelineEvent && (
+        <EventDetailModal
+          title={selectedTimelineEvent.title}
+          subtitle={`${selectedTimelineEvent.severity.toUpperCase()} · ${selectedTimelineEvent.type.toUpperCase()} · ${new Date(selectedTimelineEvent.timestamp).toLocaleString()}`}
+          payload={selectedTimelineEvent.payload ?? selectedTimelineEvent}
+          onClose={() => setSelectedTimelineEvent(null)}
+        />
+      )}
     </div>
   );
 }

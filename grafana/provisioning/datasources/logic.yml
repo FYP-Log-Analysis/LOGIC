@@ -9,4 +9,6 @@ datasources:
     editable: true
     jsonData:
       allowed_hosts:
+        - ${LOGIC_API_URL}
+        - http://localhost:4000
         - http://api:4000

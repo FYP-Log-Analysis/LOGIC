@@ -8,10 +8,9 @@ import {
   type WindowsSigmaRuleSummary,
 } from "@/lib/client";
 import { useAuthStore } from "@/lib/store";
-import { TimeRangePicker, type TimeRange } from "@/components/time-range-picker";
 import { ThreatTimeline, type ThreatEvent } from "@/components/threat-timeline";
-import { ActiveSigmaRules, type SigmaRule } from "@/components/active-sigma-rules";
 import { HawkinsChat } from "@/components/hawkins-chat";
+import { EventDetailModal } from "@/components/event-detail-modal";
 
 type WindowsSigmaResults = Awaited<ReturnType<typeof getWindowsSigmaResults>>;
 type WindowsSigmaMatch = WindowsSigmaResults["matches"][number];
@@ -21,12 +20,12 @@ export default function WindowsAnalysisPage() {
   const [sigmaResults, setSigmaResults] = useState<WindowsSigmaResults | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [timeRange, setTimeRange] = useState<TimeRange | null>(null);
   const [showChat, setShowChat] = useState(false);
   const [sigmaRuleCatalog, setSigmaRuleCatalog] = useState<WindowsSigmaRuleSummary[]>([]);
   const [ruleCatalogLoading, setRuleCatalogLoading] = useState(false);
   const [ruleViewLoading, setRuleViewLoading] = useState(false);
   const [selectedRule, setSelectedRule] = useState<{ rule: WindowsSigmaRuleSummary; yaml: string } | null>(null);
+  const [selectedThreat, setSelectedThreat] = useState<ThreatEvent | null>(null);
 
   const fetchResults = useCallback(async () => {
     if (!activeProject?.id) return;
@@ -73,21 +72,7 @@ export default function WindowsAnalysisPage() {
     }
   }, []);
 
-  const filteredSigmaMatches = useMemo(() => {
-    const matches = sigmaResults?.matches || [];
-    if (!timeRange?.startTs && !timeRange?.endTs) return matches;
-
-    const startTs = timeRange?.startTs ? new Date(timeRange.startTs).getTime() : null;
-    const endTs = timeRange?.endTs ? new Date(timeRange.endTs).getTime() : null;
-
-    return matches.filter((match) => {
-      const ts = match.timestamp ? new Date(match.timestamp).getTime() : NaN;
-      if (Number.isNaN(ts)) return false;
-      if (startTs !== null && ts < startTs) return false;
-      if (endTs !== null && ts > endTs) return false;
-      return true;
-    });
-  }, [sigmaResults?.matches, timeRange?.endTs, timeRange?.startTs]);
+  const filteredSigmaMatches = useMemo(() => sigmaResults?.matches || [], [sigmaResults?.matches]);
 
   const buildThreatEvents = (): ThreatEvent[] => {
     const events: ThreatEvent[] = [];
@@ -101,46 +86,12 @@ export default function WindowsAnalysisPage() {
           title: `Sigma: ${match.rule_title || "Unknown"}`,
           details: `Computer: ${match.computer || "unknown"} | EventID: ${match.event_id} | Channel: ${match.channel || "unknown"}`,
           source: "sigma-detection",
+          payload: match,
         });
       });
     }
     return events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   };
-
-  const severityFromLevel = (level?: string): "low" | "medium" | "high" | "critical" => {
-    const normalized = (level || "medium").toLowerCase();
-    if (normalized === "critical") return "critical";
-    if (normalized === "high") return "high";
-    if (normalized === "low") return "low";
-    return "medium";
-  };
-
-  const matchSummary: Record<string, number> = useMemo(() => {
-    const summary: Record<string, number> = {};
-    filteredSigmaMatches.forEach((match) => {
-      const raw = String(match.rule_id || "");
-      summary[raw] = (summary[raw] || 0) + 1;
-
-      const withoutPrefix = raw.startsWith("SIGMA-") ? raw.slice("SIGMA-".length) : raw;
-      const withPrefix = raw.startsWith("SIGMA-") ? raw : `SIGMA-${raw}`;
-      summary[withoutPrefix] = (summary[withoutPrefix] || 0) + 1;
-      summary[withPrefix] = (summary[withPrefix] || 0) + 1;
-    });
-    return summary;
-  }, [filteredSigmaMatches]);
-
-  const sigmaRules: SigmaRule[] = useMemo(() => {
-    return sigmaRuleCatalog.map((rule) => {
-      const prefixedId = `SIGMA-${rule.id}`;
-      return {
-        id: prefixedId,
-        title: rule.title,
-        severity: severityFromLevel(rule.level),
-        detection_count: matchSummary[prefixedId] || matchSummary[rule.id] || 0,
-        enabled: true,
-      };
-    });
-  }, [sigmaRuleCatalog, matchSummary]);
 
   if (!activeProject?.id) {
     return (
@@ -196,9 +147,6 @@ export default function WindowsAnalysisPage() {
         </button>
       </div>
 
-      {/* Time Range Picker */}
-      <TimeRangePicker onRangeChange={setTimeRange} disabled={loading} />
-
       {error && (
         <div style={{ padding: "12px", background: "#3d1a1a", border: "1px solid #8b3d3d", borderRadius: "4px", color: "#ff6b6b", fontSize: "11px" }}>
           {error}
@@ -208,156 +156,154 @@ export default function WindowsAnalysisPage() {
       {loading && <div style={{ textAlign: "center", color: "#666", padding: "20px" }}>Loading forensics data...</div>}
 
       {!loading && sigmaResults && (
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "16px", flex: 1, minHeight: 0, overflow: "hidden" }}>
-          {/* Left: Main Analysis */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px", minHeight: 0, overflow: "auto" }}>
-            {/* Summary Cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
-              <div style={{ padding: "12px", background: "#1a1a1a", border: "1px solid #333", borderRadius: "4px", borderLeft: "3px solid #7cb342" }}>
-                <div style={{ color: "#666", fontSize: "10px", marginBottom: "4px" }}>Sigma Matches</div>
-                <div style={{ color: "#7cb342", fontSize: "20px", fontWeight: "bold" }}>
-                  {filteredSigmaMatches.length}
-                </div>
-              </div>
-              <div style={{ padding: "12px", background: "#1a1a1a", border: "1px solid #333", borderRadius: "4px", borderLeft: "3px solid #ffa726" }}>
-                <div style={{ color: "#666", fontSize: "10px", marginBottom: "4px" }}>Active Rules</div>
-                <div style={{ color: "#ffa726", fontSize: "20px", fontWeight: "bold" }}>
-                  {sigmaRules.length}
-                </div>
-              </div>
-              <div style={{ padding: "12px", background: "#1a1a1a", border: "1px solid #333", borderRadius: "4px", borderLeft: "3px solid #42a5f5" }}>
-                <div style={{ color: "#666", fontSize: "10px", marginBottom: "4px" }}>Events Analyzed</div>
-                <div style={{ color: "#42a5f5", fontSize: "20px", fontWeight: "bold" }}>
-                  {sigmaResults?.total_events || 0}
-                </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px", flex: 1, minHeight: 0, overflow: "auto" }}>
+          {/* Summary Cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "10px" }}>
+            <div style={{ padding: "12px", background: "#1a1a1a", border: "1px solid #333", borderRadius: "4px", borderLeft: "3px solid #7cb342" }}>
+              <div style={{ color: "#666", fontSize: "10px", marginBottom: "4px" }}>Sigma Matches</div>
+              <div style={{ color: "#7cb342", fontSize: "20px", fontWeight: "bold" }}>
+                {filteredSigmaMatches.length}
               </div>
             </div>
-
-            {/* Timeline */}
-            {buildThreatEvents().length > 0 && (
-              <div style={{ background: "#0d0d0d", border: "1px solid #222", borderRadius: "4px", padding: "12px" }}>
-                <h3 style={{ margin: "0 0 12px", color: "#7cb342", fontSize: "12px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  Threat Timeline
-                </h3>
-                <ThreatTimeline events={buildThreatEvents()} height={200} />
+            <div style={{ padding: "12px", background: "#1a1a1a", border: "1px solid #333", borderRadius: "4px", borderLeft: "3px solid #42a5f5" }}>
+              <div style={{ color: "#666", fontSize: "10px", marginBottom: "4px" }}>Sigma Rule Library</div>
+              <div style={{ color: "#42a5f5", fontSize: "20px", fontWeight: "bold" }}>
+                {sigmaRuleCatalog.length}
               </div>
-            )}
-
-            {/* Events Table */}
-            {filteredSigmaMatches.length > 0 && (
-              <div style={{ background: "#0d0d0d", border: "1px solid #222", borderRadius: "4px", padding: "12px", overflow: "auto", flex: 1 }}>
-                <h3 style={{ margin: "0 0 12px", color: "#7cb342", fontSize: "12px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  Detection Events ({filteredSigmaMatches.length} total)
-                </h3>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid #333", stickyTop: 0 }}>
-                      {["Timestamp", "Rule", "Computer", "Event ID", "Channel", "Severity"].map((h) => (
-                        <th key={h} style={{ padding: "6px", textAlign: "left", color: "#888", fontSize: "9px", fontWeight: "bold" }}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredSigmaMatches.slice(0, 50).map((match, idx: number) => (
-                      <tr key={idx} style={{ borderBottom: "1px solid #1a1a1a" }}>
-                        <td style={{ padding: "6px", color: "#999" }}>
-                          {new Date(match.timestamp || 0).toLocaleTimeString()}
-                        </td>
-                        <td style={{ padding: "6px", color: "#7cb342", whiteSpace: "nowrap" }}>
-                          {match.rule_title || match.rule_id}
-                        </td>
-                        <td style={{ padding: "6px", color: "#aaa" }}>{match.computer || "-"}</td>
-                        <td style={{ padding: "6px", color: "#aaa" }}>{match.event_id}</td>
-                        <td style={{ padding: "6px", color: "#aaa" }}>{match.channel || "-"}</td>
-                        <td style={{ padding: "6px" }}>
-                          <span style={{
-                            padding: "2px 6px",
-                            background: match.severity === "critical" ? "#ef5350" : match.severity === "high" ? "#ffa726" : "#42a5f5",
-                            color: "#000",
-                            borderRadius: "2px",
-                            fontSize: "9px",
-                            fontWeight: "bold",
-                          }}>
-                            {match.severity}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {filteredSigmaMatches.length > 50 && (
-                  <div style={{ padding: "8px", color: "#666", fontSize: "9px", marginTop: "8px" }}>
-                    Showing 50 of {filteredSigmaMatches.length} events
-                  </div>
-                )}
-              </div>
-            )}
+            </div>
           </div>
 
-          {/* Right: Sigma Rules Panel */}
-          <div style={{ background: "#0d0d0d", border: "1px solid #222", borderRadius: "4px", padding: "12px", minHeight: 0, overflow: "auto" }}>
-            <div style={{ marginBottom: "12px" }}>
-              <ActiveSigmaRules rules={sigmaRules} matchSummary={matchSummary} />
-            </div>
+          {/* Timeline */}
+          <div style={{ background: "#0d0d0d", border: "1px solid #222", borderRadius: "4px", padding: "12px" }}>
+            <h3 style={{ margin: "0 0 12px", color: "#7cb342", fontSize: "12px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              Threat Timeline
+            </h3>
+            <ThreatTimeline
+              events={buildThreatEvents()}
+              height={260}
+              onEventClick={(event) => setSelectedThreat(event)}
+            />
+          </div>
 
-            <div style={{ borderTop: "1px solid #1f1f1f", paddingTop: "12px" }}>
-              <h3 style={{ margin: "0 0 8px", color: "#7cb342", fontSize: "12px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                Sigma Rule Library
+          {/* Events Table */}
+          {filteredSigmaMatches.length > 0 && (
+            <div style={{ background: "#0d0d0d", border: "1px solid #222", borderRadius: "4px", padding: "12px", overflow: "auto", flex: 1 }}>
+              <h3 style={{ margin: "0 0 12px", color: "#7cb342", fontSize: "12px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                Detection Events ({filteredSigmaMatches.length} total)
               </h3>
-
-              {ruleCatalogLoading && (
-                <div style={{ color: "#666", fontSize: "11px", padding: "8px 0" }}>Loading Sigma rules...</div>
-              )}
-
-              {!ruleCatalogLoading && sigmaRuleCatalog.length === 0 && (
-                <div style={{ color: "#666", fontSize: "11px", padding: "8px 0" }}>No Sigma rules found.</div>
-              )}
-
-              {!ruleCatalogLoading && sigmaRuleCatalog.length > 0 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "320px", overflowY: "auto" }}>
-                  {sigmaRuleCatalog.map((rule) => (
-                    <div
-                      key={rule.rule_path}
-                      style={{
-                        border: "1px solid #1f1f1f",
-                        borderRadius: "3px",
-                        background: "#090909",
-                        padding: "8px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                      }}
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #333", stickyTop: 0 }}>
+                    {["Timestamp", "Rule", "Computer", "Event ID", "Channel", "Severity"].map((h) => (
+                      <th key={h} style={{ padding: "6px", textAlign: "left", color: "#888", fontSize: "9px", fontWeight: "bold" }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredSigmaMatches.slice(0, 50).map((match, idx: number) => (
+                    <tr
+                      key={idx}
+                      onClick={() => setSelectedThreat({
+                        timestamp: match.timestamp || new Date().toISOString(),
+                        severity: match.severity === "critical" || match.severity === "high" ? "critical" : match.severity === "medium" ? "warning" : "info",
+                        type: "windows",
+                        title: `Sigma: ${match.rule_title || match.rule_id}`,
+                        details: `Computer: ${match.computer || "unknown"} | EventID: ${match.event_id} | Channel: ${match.channel || "unknown"}`,
+                        source: "sigma-detection",
+                        payload: match,
+                      })}
+                      style={{ borderBottom: "1px solid #1a1a1a", cursor: "pointer" }}
                     >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ color: "#d0d0d0", fontSize: "11px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {rule.title}
-                        </div>
-                        <div style={{ color: "#707070", fontSize: "10px", marginTop: "2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {rule.id} · {rule.level}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => openRuleView(rule.rule_path)}
-                        disabled={ruleViewLoading}
-                        style={{
-                          border: "1px solid #355a3b",
-                          color: "#7cb342",
-                          background: "#101a10",
-                          fontSize: "10px",
+                      <td style={{ padding: "6px", color: "#999" }}>
+                        {new Date(match.timestamp || 0).toLocaleTimeString()}
+                      </td>
+                      <td style={{ padding: "6px", color: "#7cb342", whiteSpace: "nowrap" }}>
+                        {match.rule_title || match.rule_id}
+                      </td>
+                      <td style={{ padding: "6px", color: "#aaa" }}>{match.computer || "-"}</td>
+                      <td style={{ padding: "6px", color: "#aaa" }}>{match.event_id}</td>
+                      <td style={{ padding: "6px", color: "#aaa" }}>{match.channel || "-"}</td>
+                      <td style={{ padding: "6px" }}>
+                        <span style={{
+                          padding: "2px 6px",
+                          background: match.severity === "critical" ? "#ef5350" : match.severity === "high" ? "#ffa726" : "#42a5f5",
+                          color: "#000",
                           borderRadius: "2px",
-                          padding: "4px 8px",
-                          cursor: ruleViewLoading ? "not-allowed" : "pointer",
-                        }}
-                      >
-                        VIEW
-                      </button>
-                    </div>
+                          fontSize: "9px",
+                          fontWeight: "bold",
+                        }}>
+                          {match.severity}
+                        </span>
+                      </td>
+                    </tr>
                   ))}
+                </tbody>
+              </table>
+              {filteredSigmaMatches.length > 50 && (
+                <div style={{ padding: "8px", color: "#666", fontSize: "9px", marginTop: "8px" }}>
+                  Showing 50 of {filteredSigmaMatches.length} events
                 </div>
               )}
             </div>
+          )}
+
+          <div style={{ background: "#0d0d0d", border: "1px solid #222", borderRadius: "4px", padding: "12px", minHeight: 0, overflow: "auto" }}>
+            <h3 style={{ margin: "0 0 8px", color: "#7cb342", fontSize: "12px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              Sigma Rule Library
+            </h3>
+
+            {ruleCatalogLoading && (
+              <div style={{ color: "#666", fontSize: "11px", padding: "8px 0" }}>Loading Sigma rules...</div>
+            )}
+
+            {!ruleCatalogLoading && sigmaRuleCatalog.length === 0 && (
+              <div style={{ color: "#666", fontSize: "11px", padding: "8px 0" }}>No Sigma rules found.</div>
+            )}
+
+            {!ruleCatalogLoading && sigmaRuleCatalog.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "320px", overflowY: "auto" }}>
+                {sigmaRuleCatalog.map((rule) => (
+                  <div
+                    key={rule.rule_path}
+                    style={{
+                      border: "1px solid #1f1f1f",
+                      borderRadius: "3px",
+                      background: "#090909",
+                      padding: "8px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: "#d0d0d0", fontSize: "11px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {rule.title}
+                      </div>
+                      <div style={{ color: "#707070", fontSize: "10px", marginTop: "2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {rule.id} · {rule.level}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => openRuleView(rule.rule_path)}
+                      disabled={ruleViewLoading}
+                      style={{
+                        border: "1px solid #355a3b",
+                        color: "#7cb342",
+                        background: "#101a10",
+                        fontSize: "10px",
+                        borderRadius: "2px",
+                        padding: "4px 8px",
+                        cursor: ruleViewLoading ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      VIEW
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -432,6 +378,15 @@ export default function WindowsAnalysisPage() {
             </pre>
           </div>
         </div>
+      )}
+
+      {selectedThreat && (
+        <EventDetailModal
+          title={selectedThreat.title}
+          subtitle={`${selectedThreat.severity.toUpperCase()} · ${selectedThreat.type.toUpperCase()} · ${new Date(selectedThreat.timestamp).toLocaleString()}`}
+          payload={selectedThreat.payload ?? selectedThreat}
+          onClose={() => setSelectedThreat(null)}
+        />
       )}
     </main>
   );

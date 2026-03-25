@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+python-multipart
+groq
+ijson
+python-dotenv
+pyyaml
+maxminddb
+python-evtx
+numpy
+scikit-learn
+# Auth
+python-jose[cryptography]
+bcrypt>=4.0.0

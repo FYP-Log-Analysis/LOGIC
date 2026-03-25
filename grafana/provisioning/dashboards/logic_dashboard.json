@@ -1,0 +1,184 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "annotations": { "list": [] },
+  "description": "Real-time web log forensics — rule detections & ML anomalies",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "logic-infinity" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^total_detections$/", "values": false }, "textMode": "auto" },
+      "title": "Total Detections",
+      "type": "stat",
+      "targets": [{ "refId": "A", "type": "json", "source": "url", "url": "http://api:4000/api/search/stats", "url_options": { "method": "GET" }, "format": "dataframe", "root_selector": "", "columns": [{ "selector": "total_detections", "text": "total_detections", "type": "number" }] }]
+    },
+    {
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "logic-infinity" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }] } },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "id": 2,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^anomaly_count$/", "values": false }, "textMode": "auto" },
+      "title": "ML Anomalies Detected",
+      "type": "stat",
+      "targets": [{ "refId": "A", "type": "json", "source": "url", "url": "http://api:4000/api/search/stats", "url_options": { "method": "GET" }, "format": "dataframe", "root_selector": "", "columns": [{ "selector": "anomaly_count", "text": "anomaly_count", "type": "number" }] }]
+    },
+    {
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "logic-infinity" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "dark-red", "value": 1 }] } },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "id": 3,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^total_log_entries$/", "values": false }, "textMode": "auto" },
+      "title": "Total Log Entries Processed",
+      "type": "stat",
+      "targets": [{ "refId": "A", "type": "json", "source": "url", "url": "http://api:4000/api/search/stats", "url_options": { "method": "GET" }, "format": "dataframe", "root_selector": "", "columns": [{ "selector": "total_log_entries", "text": "total_log_entries", "type": "number" }] }]
+    },
+    {
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "logic-infinity" },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "severity" }, "properties": [{ "id": "custom.width", "value": 100 }] },
+          { "matcher": { "id": "byName", "options": "cnt" },      "properties": [{ "id": "displayName", "value": "Count" }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 4 },
+      "id": 4,
+      "options": { "footer": { "show": false }, "showHeader": true },
+      "title": "Detections by Severity",
+      "type": "table",
+      "targets": [{
+        "refId": "A",
+        "type": "json",
+        "source": "url",
+        "url": "http://api:4000/api/search/stats",
+        "url_options": { "method": "GET" },
+        "format": "dataframe",
+        "root_selector": "detections_by_severity",
+        "columns": [
+          { "selector": "key",   "text": "severity", "type": "string" },
+          { "selector": "value", "text": "cnt",       "type": "number" }
+        ]
+      }]
+    },
+    {
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "logic-infinity" },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "client_ip" },  "properties": [{ "id": "custom.width", "value": 140 }] },
+          { "matcher": { "id": "byName", "options": "hit_count" },  "properties": [{ "id": "displayName", "value": "Hit Count" }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 4 },
+      "id": 5,
+      "options": { "footer": { "show": false }, "showHeader": true },
+      "title": "Top Offending IPs",
+      "type": "table",
+      "targets": [{
+        "refId": "A",
+        "type": "json",
+        "source": "url",
+        "url": "http://api:4000/api/search/stats",
+        "url_options": { "method": "GET" },
+        "format": "dataframe",
+        "root_selector": "top_offending_ips",
+        "columns": [
+          { "selector": "client_ip",  "text": "client_ip",  "type": "string" },
+          { "selector": "hit_count",  "text": "hit_count",  "type": "number" }
+        ]
+      }]
+    },
+    {
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "logic-infinity" },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "severity" },   "properties": [{ "id": "custom.width", "value": 90 }] },
+          { "matcher": { "id": "byName", "options": "rule_title" }, "properties": [{ "id": "custom.width", "value": 220 }] },
+          { "matcher": { "id": "byName", "options": "client_ip" },  "properties": [{ "id": "custom.width", "value": 130 }] },
+          { "matcher": { "id": "byName", "options": "timestamp" },  "properties": [{ "id": "custom.width", "value": 160 }] }
+        ]
+      },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 12 },
+      "id": 6,
+      "options": { "footer": { "show": true, "reducer": ["count"] }, "showHeader": true },
+      "title": "Rule Detections",
+      "type": "table",
+      "targets": [{
+        "refId": "A",
+        "type": "json",
+        "source": "url",
+        "url": "http://api:4000/api/search/detections?limit=500",
+        "url_options": { "method": "GET" },
+        "format": "dataframe",
+        "root_selector": "results",
+        "columns": [
+          { "selector": "timestamp",  "text": "timestamp",  "type": "string" },
+          { "selector": "severity",   "text": "severity",   "type": "string" },
+          { "selector": "rule_title", "text": "rule_title", "type": "string" },
+          { "selector": "client_ip",  "text": "client_ip",  "type": "string" },
+          { "selector": "method",     "text": "method",     "type": "string" },
+          { "selector": "path",       "text": "path",       "type": "string" },
+          { "selector": "status_code","text": "status_code","type": "number" }
+        ]
+      }]
+    },
+    {
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "logic-infinity" },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "anomaly_score" }, "properties": [{ "id": "custom.width", "value": 120 }, { "id": "displayName", "value": "Anomaly Score" }] },
+          { "matcher": { "id": "byName", "options": "client_ip" },     "properties": [{ "id": "custom.width", "value": 130 }] }
+        ]
+      },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 22 },
+      "id": 7,
+      "options": { "footer": { "show": true, "reducer": ["count"] }, "showHeader": true },
+      "title": "ML Anomalies",
+      "type": "table",
+      "targets": [{
+        "refId": "A",
+        "type": "json",
+        "source": "url",
+        "url": "http://api:4000/api/search/anomalies?only_anomalies=true&limit=500",
+        "url_options": { "method": "GET" },
+        "format": "dataframe",
+        "root_selector": "results",
+        "columns": [
+          { "selector": "timestamp",     "text": "timestamp",     "type": "string" },
+          { "selector": "client_ip",     "text": "client_ip",     "type": "string" },
+          { "selector": "method",        "text": "method",        "type": "string" },
+          { "selector": "path",          "text": "path",          "type": "string" },
+          { "selector": "status_code",   "text": "status_code",   "type": "number" },
+          { "selector": "anomaly_score", "text": "anomaly_score", "type": "number" }
+        ]
+      }]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["logic", "security", "web-logs"],
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "LOGIC Web Agent — Security Overview",
+  "uid": "logic-security-overview",
+  "version": 1
+}

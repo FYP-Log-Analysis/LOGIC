@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+:root {
+  --background: #080808;
+  --sidebar-bg: #0d0d0d;
+  --foreground: #c0c0c0;
+  --foreground-strong: #e0e0e0;
+  --border: #1e1e1e;
+  --muted: #333333;
+  --muted-text: #555555;
+  --accent: #c0c0c0;
+  --card-bg: #111111;
+  --input-bg: #111111;
+  --input-border: #2a2a2a;
+
+  /* Severity colors */
+  --severity-critical: #ff4444;
+  --severity-high: #ff8800;
+  --severity-medium: #f0c040;
+  --severity-low: #4488ff;
+
+  /* Role colors */
+  --role-admin: #6b46c1;
+  --role-analyst: #1d4ed8;
+
+  /* Hawkins purple */
+  --hawkins: #7c3aed;
+  --hawkins-bg: #4c1d95;
+  --hawkins-border: #2d1b69;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 14px;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: #0d0d0d; }
+::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #404040; }
+
+/* Utility classes for the design system */
+.card-dark {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 16px;
+}
+
+.label-upper {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted-text);
+}
+
+.section-title {
+  font-size: 24px;
+  font-weight: 300;
+  letter-spacing: 3px;
+  color: var(--foreground-strong);
+  margin-bottom: 4px;
+}
+
+.section-subtitle {
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  color: var(--muted-text);
+  margin-bottom: 24px;
+}

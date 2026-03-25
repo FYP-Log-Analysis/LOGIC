@@ -1,0 +1,9 @@
+{
+  "project_id": "5f184e8f-2019-488e-99e5-f97bbc2ac1c2",
+  "upload_id": "0ef5d4e4-1153-48f8-8a98-9a07c7fd1737",
+  "window_minutes": 5,
+  "total_windows": 0,
+  "anomalous_windows": 0,
+  "windows": [],
+  "status": "skipped:no_windows_events"
+}

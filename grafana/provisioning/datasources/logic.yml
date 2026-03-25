@@ -1,0 +1,12 @@
+apiVersion: 1
+
+datasources:
+  - name: LOGIC API
+    uid: logic-infinity
+    type: yesoreyeram-infinity-datasource
+    access: proxy
+    isDefault: true
+    editable: true
+    jsonData:
+      allowed_hosts:
+        - http://api:4000

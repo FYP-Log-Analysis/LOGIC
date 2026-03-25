@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-03-24T09:02:38Z",
+  "start_ts": null,
+  "end_ts": null,
+  "thresholds": {
+    "rate_window_minutes": 1,
+    "rate_threshold": 60,
+    "enum_window_hours": 1,
+    "enum_threshold": 50,
+    "status_window_minutes": 5,
+    "status_error_ratio": 0.5,
+    "visitor_zscore": 2.0
+  },
+  "summary": {
+    "total_rate_spike_windows": 0,
+    "total_enumeration_alerts": 0,
+    "total_status_spike_windows": 0,
+    "total_visitor_anomaly_hours": 0
+  },
+  "request_rate_spikes": [],
+  "url_enumeration": [],
+  "status_code_spikes": [],
+  "visitor_rates": []
+}

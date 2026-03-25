@@ -1,0 +1,15 @@
+.git/
+.gitignore
+.venv/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+**/.DS_Store
+node_modules/
+frontend/.next/
+frontend/node_modules/
+data/projects/
+data/crs_audit/
+*.log

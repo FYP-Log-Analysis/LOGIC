@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import type { ThreatEvent } from "@/components/threat-timeline";
 
 interface Message {
   role: "user" | "assistant";
@@ -13,6 +14,7 @@ interface HawkinsChatProps {
   dataSummary?: string | Record<string, unknown>;
   componentKey: string;
   helpGuide?: string;
+  selectedThreat?: ThreatEvent | null;
 }
 
 function buildContext(props: HawkinsChatProps): string {
@@ -28,6 +30,27 @@ function buildContext(props: HawkinsChatProps): string {
   }
   if (props.helpGuide) {
     lines.push(`HOW_TO_USE:\n${props.helpGuide}`);
+  }
+  if (props.selectedThreat) {
+    const payload = props.selectedThreat.payload ?? props.selectedThreat;
+    lines.push(
+      `SELECTED_THREAT:\n${JSON.stringify(
+        {
+          timestamp: props.selectedThreat.timestamp,
+          severity: props.selectedThreat.severity,
+          type: props.selectedThreat.type,
+          title: props.selectedThreat.title,
+          details: props.selectedThreat.details,
+          source: props.selectedThreat.source,
+          payload,
+        },
+        null,
+        2,
+      )}`,
+    );
+    lines.push(
+      "RESPONSE_MODE: detailed_forensic_report. Provide evidence-backed reasoning, plausible attack path, confidence level, and prioritized next investigative steps.",
+    );
   }
   return lines.join("\n\n");
 }
@@ -139,6 +162,11 @@ export default function HawkinsChat(props: HawkinsChatProps) {
             <span style={{ color: "#e0e0e0", fontSize: 13, fontWeight: 300, letterSpacing: 1 }}>
               {props.title}
             </span>
+            {props.selectedThreat && (
+              <span style={{ color: "#a78bfa", fontSize: 10, letterSpacing: 1, textTransform: "uppercase" }}>
+                Threat Attached
+              </span>
+            )}
             <button
               onClick={() => setOpen(false)}
               style={{ marginLeft: "auto", background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 16 }}

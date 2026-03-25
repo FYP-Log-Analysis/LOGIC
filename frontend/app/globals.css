@@ -27,6 +27,18 @@
   --hawkins: #7c3aed;
   --hawkins-bg: #4c1d95;
   --hawkins-border: #2d1b69;
+
+  /* Layout scale */
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-14: 56px;
+  --space-16: 64px;
 }
 
 @theme inline {
@@ -43,7 +55,7 @@ html, body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 /* Custom scrollbar */
@@ -56,8 +68,8 @@ html, body {
 .card-dark {
   background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 16px;
+  border-radius: 6px;
+  padding: 24px;
 }
 
 .label-upper {
@@ -76,8 +88,28 @@ html, body {
 }
 
 .section-subtitle {
-  font-size: 13px;
+  font-size: 14px;
   letter-spacing: 0.5px;
   color: var(--muted-text);
-  margin-bottom: 24px;
+  margin-bottom: 32px;
+}
+
+.page-shell {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.section-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  margin-bottom: var(--space-10);
+}
+
+.surface-panel {
+  background: #0d0d0d;
+  border: 1px solid #1e1e1e;
+  border-radius: 6px;
+  padding: var(--space-6);
 }

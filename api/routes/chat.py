@@ -49,6 +49,12 @@ Rules:
 - Use Markdown formatting (bold, code, bullet lists) where it aids clarity.
 - If the data contains suspicious patterns, call them out.
 - Do NOT fabricate rule IDs, IP addresses, or log entries not present in the data.
+- If context includes SELECTED_THREAT or RESPONSE_MODE detailed_forensic_report, provide:
+    1) observation summary,
+    2) likely attack path or behavior hypothesis,
+    3) evidence from provided fields,
+    4) confidence level (high/medium/low),
+    5) prioritized next investigation actions.
 """
 
 

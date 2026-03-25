@@ -264,7 +264,7 @@ export default function DashboardLayout({
             flex: 1,
             overflowY: "auto",
             background: "#080808",
-            padding: "32px 36px",
+            padding: "44px 56px",
           }}
         >
           {children}

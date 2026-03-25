@@ -21,8 +21,8 @@ export function MetricCard({ label, value, sub, accent }: MetricCardProps) {
       style={{
         background: "#111",
         border: "1px solid #1e1e1e",
-        borderRadius: 4,
-        padding: "16px 20px",
+        borderRadius: 6,
+        padding: "22px 24px",
       }}
     >
       <div
@@ -31,14 +31,14 @@ export function MetricCard({ label, value, sub, accent }: MetricCardProps) {
           letterSpacing: 1.2,
           textTransform: "uppercase",
           color: "#555",
-          marginBottom: 8,
+          marginBottom: 10,
         }}
       >
         {label}
       </div>
       <div
         style={{
-          fontSize: 28,
+          fontSize: 30,
           fontWeight: 300,
           color: accent ?? "#e8e8e8",
           lineHeight: 1,
@@ -47,7 +47,7 @@ export function MetricCard({ label, value, sub, accent }: MetricCardProps) {
         {typeof value === "number" ? value.toLocaleString() : value}
       </div>
       {sub && (
-        <div style={{ fontSize: 11, color: "#444", marginTop: 4 }}>{sub}</div>
+        <div style={{ fontSize: 12, color: "#4b4b4b", marginTop: 8 }}>{sub}</div>
       )}
     </div>
   );
@@ -62,12 +62,12 @@ interface SectionHeaderProps {
 
 export function SectionHeader({ title, subtitle }: SectionHeaderProps) {
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div style={{ marginBottom: 32 }}>
       <h2
         style={{
           fontSize: 24,
           fontWeight: 300,
-          letterSpacing: 3,
+          letterSpacing: 2,
           color: "#e0e0e0",
           margin: 0,
         }}
@@ -77,11 +77,12 @@ export function SectionHeader({ title, subtitle }: SectionHeaderProps) {
       {subtitle && (
         <p
           style={{
-            fontSize: 13,
+            fontSize: 14,
             color: "#555",
             letterSpacing: 0.5,
-            marginTop: 4,
+            marginTop: 8,
             marginBottom: 0,
+            lineHeight: 1.5,
           }}
         >
           {subtitle}
@@ -228,7 +229,7 @@ export function StatusBadge({ status }: { status: string }) {
 export function Divider() {
   return (
     <div
-      style={{ height: 1, background: "#1a1a1a", margin: "20px 0" }}
+      style={{ height: 1, background: "#1a1a1a", margin: "32px 0" }}
     />
   );
 }

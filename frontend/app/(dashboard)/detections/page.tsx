@@ -577,9 +577,10 @@ export default function DetectionsPage() {
         <HawkinsChat
           title="Hawkins — Detections"
           description="Ask about specific threats, attack patterns, or suspicious IPs"
-          dataSummary={`${totalDetections} rule matches across ${uniqueRules} unique rules. Critical: ${matchSeverityCounts.critical ?? 0}, High: ${matchSeverityCounts.high ?? 0}. Open alerts (unresolved): ${openAlerts}.`}
+          dataSummary={`${totalDetections} rule matches across ${uniqueRules} unique rules. Critical: ${matchSeverityCounts.critical ?? 0}, High: ${matchSeverityCounts.high ?? 0}. Open alerts (unresolved): ${openAlerts}.${selectedTimelineEvent ? ` Selected threat: ${selectedTimelineEvent.title} (${selectedTimelineEvent.severity}) at ${new Date(selectedTimelineEvent.timestamp).toLocaleString()}.` : " No selected timeline threat yet."}`}
           componentKey="detections"
           helpGuide="Try: 'Which IPs are most suspicious?' or 'Explain the SQL injection alerts'. Use the Triage column to mark alerts as Investigating or Resolved — status persists in your browser. Toggle Successful Hits to see attacks that may have landed (server returned 2xx). Export CSV sends the current filtered view to your downloads folder."
+          selectedThreat={selectedTimelineEvent}
         />
       </div>
 

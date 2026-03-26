@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   getLogStatistics,
   getWindowsSigmaRuleDetail,
@@ -80,6 +80,26 @@ export default function OverviewPage() {
       setRuleViewLoading(false);
     }
   }, []);
+
+  const sigmaRulesByFolder = useMemo(() => {
+    const grouped = new Map<string, WindowsSigmaRuleSummary[]>();
+    for (const rule of sigmaRuleCatalog) {
+      const rawPath = rule.rule_path || "";
+      const normalized = rawPath.replace(/^windows\//, "");
+      const lastSlash = normalized.lastIndexOf("/");
+      const folder = lastSlash > -1 ? normalized.slice(0, lastSlash) : "(root)";
+      const bucket = grouped.get(folder) ?? [];
+      bucket.push(rule);
+      grouped.set(folder, bucket);
+    }
+
+    return Array.from(grouped.entries())
+      .map(([folder, rules]) => ({
+        folder,
+        rules: [...rules].sort((a, b) => (a.title || "").localeCompare(b.title || "")),
+      }))
+      .sort((a, b) => a.folder.localeCompare(b.folder));
+  }, [sigmaRuleCatalog]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -199,42 +219,51 @@ export default function OverviewPage() {
 
             {!sigmaRuleLoading && sigmaRuleCatalog.length > 0 && (
               <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "320px", overflowY: "auto" }}>
-                {sigmaRuleCatalog.map((rule) => (
-                  <div
-                    key={rule.rule_path}
-                    style={{
-                      border: "1px solid #1f1f1f",
-                      borderRadius: "4px",
-                      background: "#090909",
-                      padding: "10px",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "10px",
-                    }}
-                  >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ color: "#d0d0d0", fontSize: "12px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {rule.title}
-                      </div>
-                      <div style={{ color: "#707070", fontSize: "11px", marginTop: "3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {rule.id} · {rule.level}
-                      </div>
+                {sigmaRulesByFolder.map((group) => (
+                  <div key={group.folder} style={{ border: "1px solid #1f1f1f", borderRadius: "4px", background: "#090909", padding: "8px" }}>
+                    <div style={{ color: "#7cb342", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: "8px" }}>
+                      windows/{group.folder} · {group.rules.length} rule{group.rules.length === 1 ? "" : "s"}
                     </div>
-                    <button
-                      onClick={() => openRuleView(rule.rule_path)}
-                      disabled={ruleViewLoading}
-                      style={{
-                        border: "1px solid #355a3b",
-                        color: "#7cb342",
-                        background: "#101a10",
-                        fontSize: "11px",
-                        borderRadius: "4px",
-                        padding: "6px 10px",
-                        cursor: ruleViewLoading ? "not-allowed" : "pointer",
-                      }}
-                    >
-                      VIEW
-                    </button>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      {group.rules.map((rule) => (
+                        <div
+                          key={rule.rule_path}
+                          style={{
+                            border: "1px solid #1f1f1f",
+                            borderRadius: "4px",
+                            background: "#0b0b0b",
+                            padding: "10px",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "10px",
+                          }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ color: "#d0d0d0", fontSize: "12px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {rule.title}
+                            </div>
+                            <div style={{ color: "#707070", fontSize: "11px", marginTop: "3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {rule.id} · {rule.level}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => openRuleView(rule.rule_path)}
+                            disabled={ruleViewLoading}
+                            style={{
+                              border: "1px solid #355a3b",
+                              color: "#7cb342",
+                              background: "#101a10",
+                              fontSize: "11px",
+                              borderRadius: "4px",
+                              padding: "6px 10px",
+                              cursor: ruleViewLoading ? "not-allowed" : "pointer",
+                            }}
+                          >
+                            VIEW
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>

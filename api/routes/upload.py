@@ -316,10 +316,18 @@ async def get_log_entries(
     limit:      int        = Query(5000, le=10000, description="Max rows to return"),
     project_id: str | None = Query(None, description="Scope to a specific project"),
     upload_id:  str | None = Query(None, description="Return entries for a specific upload"),
+    live_only: bool        = Query(False, description="Only return live agent stream logs"),
+    exclude_windows: bool  = Query(False, description="Exclude Windows event log entries"),
     _user:      UserInDB   = Depends(get_current_user),
 ) -> list:
     """Return normalised log entries for a specific upload."""
-    return query_logs(limit=limit, project_id=project_id, upload_id=upload_id)
+    return query_logs(
+        limit=limit,
+        project_id=project_id,
+        upload_id=upload_id,
+        live_only=live_only,
+        exclude_windows=exclude_windows,
+    )
 
 
 @router.get("/logs/statistics")

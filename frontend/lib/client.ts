@@ -10,7 +10,7 @@ export interface ScopeOpts {
   endTs?:     string;
 }
 
-function buildQuery(base: string, opts?: ScopeOpts & { limit?: number }): string {
+function buildQuery(base: string, opts?: ScopeOpts & { limit?: number; excludeWindows?: boolean; liveOnly?: boolean }): string {
   const params = new URLSearchParams();
   // Preserve existing query from base
   const [path, existing] = base.split("?");
@@ -20,6 +20,8 @@ function buildQuery(base: string, opts?: ScopeOpts & { limit?: number }): string
   if (opts?.uploadId)           params.set("upload_id",  opts.uploadId);
   if (opts?.startTs)            params.set("start_ts",   opts.startTs);
   if (opts?.endTs)              params.set("end_ts",     opts.endTs);
+  if (opts?.liveOnly)           params.set("live_only", "true");
+  if (opts?.excludeWindows)     params.set("exclude_windows", "true");
   const qs = params.toString();
   return qs ? `${path}?${qs}` : path;
 }
@@ -351,10 +353,13 @@ export interface RawLogEntry {
   response_size?: number;
   user_agent?: string;
   source?: string;
+  server_type?: string;
   [key: string]: unknown;
 }
 
-export async function getRawLogs(opts?: Pick<ScopeOpts, "projectId" | "uploadId"> & { limit?: number }): Promise<RawLogEntry[]> {
+export async function getRawLogs(
+  opts?: Pick<ScopeOpts, "projectId" | "uploadId"> & { limit?: number; excludeWindows?: boolean; liveOnly?: boolean },
+): Promise<RawLogEntry[]> {
   return apiGet<RawLogEntry[]>(buildQuery("api/logs/entries", opts));
 }
 

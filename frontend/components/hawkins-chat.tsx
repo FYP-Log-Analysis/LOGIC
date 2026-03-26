@@ -129,7 +129,7 @@ export default function HawkinsChat(props: HawkinsChatProps) {
           color: "#e9d5ff", fontSize: 22, cursor: "pointer",
           display: "flex", alignItems: "center", justifyContent: "center",
           boxShadow: "0 4px 20px rgba(109,40,217,0.45)",
-          zIndex: 99998, transition: "background 0.2s",
+          zIndex: 2147483000, transition: "background 0.2s",
         }}
         onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#6d28d9"; }}
         onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#4c1d95"; }}
@@ -146,7 +146,7 @@ export default function HawkinsChat(props: HawkinsChatProps) {
           borderRadius: 10,
           boxShadow: "0 8px 40px rgba(109,40,217,0.30), 0 2px 12px rgba(0,0,0,0.85)",
           display: "flex", flexDirection: "column",
-          overflow: "hidden", zIndex: 99997,
+          overflow: "hidden", zIndex: 2147482999,
           fontFamily: "'SF Mono','Fira Code','Consolas',monospace",
         }}>
           {/* Header */}

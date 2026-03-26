@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DB_PATH      = PROJECT_ROOT / "data" / "logic.db"
+LIVE_UPLOAD_FILENAME = "live-stream.log"
 
 
 @contextmanager
@@ -305,10 +306,40 @@ def _latest_completed_upload(project_id: str) -> str | None:
         return row[0] if row else None
 
 
+def _latest_live_upload(project_id: str) -> str | None:
+    """Return latest live-stream upload_id for a project."""
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT upload_id FROM upload_status "
+            "WHERE project_id = ? AND filename = ? AND stage = 'saved' AND status = 'complete' "
+            "ORDER BY started_at DESC LIMIT 1",
+            (project_id, LIVE_UPLOAD_FILENAME),
+        ).fetchone()
+        if row:
+            return row[0]
+        row = conn.execute(
+            "SELECT upload_id FROM upload_status "
+            "WHERE project_id = ? AND filename = ? ORDER BY started_at DESC LIMIT 1",
+            (project_id, LIVE_UPLOAD_FILENAME),
+        ).fetchone()
+        return row[0] if row else None
+
+
+def _is_live_upload(upload_id: str) -> bool:
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT filename FROM upload_status WHERE upload_id = ? LIMIT 1",
+            (upload_id,),
+        ).fetchone()
+        return bool(row and row[0] == LIVE_UPLOAD_FILENAME)
+
+
 def query_logs(
     limit:      int = 5000,
     project_id: str | None = None,
     upload_id:  str | None = None,
+    live_only: bool = False,
+    exclude_windows: bool = False,
 ) -> list[dict]:
     """Stream normalised log entries from the per-upload JSON file.
 
@@ -322,7 +353,13 @@ def query_logs(
         logger.warning("query_logs: project_id is required")
         return []
 
-    resolved_upload = upload_id or _latest_completed_upload(project_id)
+    if upload_id:
+        if live_only and not _is_live_upload(upload_id):
+            logger.warning("query_logs: upload=%s is not a live-stream upload", upload_id)
+            return []
+        resolved_upload = upload_id
+    else:
+        resolved_upload = _latest_live_upload(project_id) if live_only else _latest_completed_upload(project_id)
     if not resolved_upload:
         logger.warning("query_logs: no uploads found for project=%s", project_id)
         return []
@@ -336,6 +373,10 @@ def query_logs(
     try:
         with open(p, "rb") as fh:
             for entry in ijson.items(fh, "item"):
+                if exclude_windows:
+                    server_type = str(entry.get("server_type") or "").lower()
+                    if server_type == "windows_event" or "windows" in server_type:
+                        continue
                 results.append(entry)
                 if len(results) >= limit:
                     break

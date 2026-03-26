@@ -23,6 +23,7 @@ import {
 type ProjectOption = {
   id: string;
   name?: string;
+  project_type?: "web" | "windows";
 };
 
 function formatUptime(totalSeconds: number): string {
@@ -73,18 +74,27 @@ export default function AgentsPage() {
     }
   }, [activeProject?.id]);
 
-  const loadProjectRuntime = useCallback(async (projectId: string) => {
+  const loadProjectRuntime = useCallback(async (projectId: string, projectType?: "web" | "windows") => {
     setError("");
     setLogsLoading(true);
     try {
+      const logsPromise = projectType === "windows"
+        ? Promise.resolve([] as RawLogEntry[])
+        : getRawLogs({ projectId, limit: 500, liveOnly: true, excludeWindows: true });
+
       const [mon, keyData, logs] = await Promise.all([
         getLiveAgentMonitor(projectId),
         getProjectApiKey(projectId),
-        getRawLogs({ projectId, limit: 500 }),
+        logsPromise,
       ]);
       setMonitor(mon);
       setApiKeys((prev) => ({ ...prev, [projectId]: keyData.api_key ?? null }));
-      setRawLogs(logs);
+      setRawLogs(
+        logs.filter((entry) => {
+          const serverType = String(entry.server_type ?? "").toLowerCase();
+          return !(serverType === "windows_event" || serverType.includes("windows"));
+        }),
+      );
     } catch (e) {
       setError(String(e));
       setRawLogs([]);
@@ -99,7 +109,7 @@ export default function AgentsPage() {
 
   useEffect(() => {
     if (!selectedProjectId) return;
-    loadProjectRuntime(selectedProjectId);
+    loadProjectRuntime(selectedProjectId, selectedProject?.project_type);
 
     let cancelled = false;
     const id = window.setInterval(async () => {
@@ -113,7 +123,7 @@ export default function AgentsPage() {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [selectedProjectId, loadProjectRuntime]);
+  }, [selectedProjectId, selectedProject?.project_type, loadProjectRuntime]);
 
   const selectedApiKey = selectedProjectId ? apiKeys[selectedProjectId] ?? null : null;
   const filteredLogs = useMemo(() => {
@@ -303,7 +313,7 @@ export default function AgentsPage() {
               </Btn>
               <Btn
                 variant="ghost"
-                onClick={() => selectedProjectId && loadProjectRuntime(selectedProjectId)}
+                onClick={() => selectedProjectId && loadProjectRuntime(selectedProjectId, selectedProject?.project_type)}
                 disabled={!selectedProjectId}
               >
                 REFRESH
@@ -347,6 +357,10 @@ export default function AgentsPage() {
 
             {logsLoading ? (
               <div style={{ textAlign: "center", padding: 24 }}><Spinner size={18} /></div>
+            ) : selectedProject?.project_type === "windows" ? (
+              <div style={{ color: "#444", fontSize: 12, border: "1px dashed #1e1e1e", borderRadius: 4, padding: 20 }}>
+                Incoming Raw Logs is available for web-agent streams only. Windows project logs are intentionally hidden here.
+              </div>
             ) : rawLogs.length === 0 ? (
               <div style={{ color: "#444", fontSize: 12, border: "1px dashed #1e1e1e", borderRadius: 4, padding: 20 }}>
                 No log entries available. Upload logs or connect the agent to populate this view.

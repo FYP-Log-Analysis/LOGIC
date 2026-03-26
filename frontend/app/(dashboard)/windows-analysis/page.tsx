@@ -17,7 +17,6 @@ export default function WindowsAnalysisPage() {
   const [sigmaResults, setSigmaResults] = useState<WindowsSigmaResults | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showChat, setShowChat] = useState(false);
   const [selectedThreat, setSelectedThreat] = useState<ThreatEvent | null>(null);
 
   const fetchResults = useCallback(async () => {
@@ -61,24 +60,6 @@ export default function WindowsAnalysisPage() {
     return events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [filteredSigmaMatches]);
 
-  const selectedThreatSummary = useMemo(() => {
-    if (!selectedThreat) return "No threat selected. Select an event to anchor Hawkins on a specific detection.";
-    const match = (selectedThreat.payload ?? {}) as Record<string, unknown>;
-    return [
-      `Selected Threat: ${selectedThreat.title}`,
-      `Severity: ${selectedThreat.severity}`,
-      `Timestamp: ${selectedThreat.timestamp}`,
-      `Rule ID: ${String(match.rule_id ?? "unknown")}`,
-      `Rule Title: ${String(match.rule_title ?? "unknown")}`,
-      `Computer: ${String(match.computer ?? "unknown")}`,
-      `Event ID: ${String(match.event_id ?? "unknown")}`,
-      `Channel: ${String(match.channel ?? "unknown")}`,
-      `Provider: ${String(match.provider_name ?? "unknown")}`,
-      `Logon Type: ${String(match.logon_type ?? "unknown")}`,
-      `Command Line: ${String(match.command_line ?? "n/a")}`,
-    ].join("\n");
-  }, [selectedThreat]);
-
   if (!activeProject?.id) {
     return (
       <div style={{ textAlign: "center", padding: "60px", color: "#666" }}>
@@ -114,23 +95,6 @@ export default function WindowsAnalysisPage() {
             {activeProject?.name} — Sigma rule detection and threat timeline analysis
           </p>
         </div>
-        <button
-          onClick={() => setShowChat(!showChat)}
-          style={{
-            padding: "8px 14px",
-            background: showChat ? "#1a3d2a" : "#1a1a1a",
-            border: `1px solid ${showChat ? "#4a7c59" : "#333"}`,
-            color: showChat ? "#7cb342" : "#888",
-            borderRadius: "4px",
-            cursor: "pointer",
-            fontSize: "11px",
-            fontWeight: "bold",
-            textTransform: "uppercase",
-            letterSpacing: "0.8px",
-          }}
-        >
-          {showChat ? "Hide Chat" : "Show Chat"}
-        </button>
       </div>
 
       {error && (
@@ -142,7 +106,7 @@ export default function WindowsAnalysisPage() {
       {loading && <div style={{ textAlign: "center", color: "#666", padding: "20px" }}>Loading forensics data...</div>}
 
       {!loading && sigmaResults && (
-        <div style={{ display: "grid", gridTemplateColumns: showChat ? "minmax(0, 1.65fr) minmax(360px, 1fr)" : "1fr", gap: 20, flex: 1, minHeight: 0, overflow: "hidden" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 20, flex: 1, minHeight: 0, overflow: "hidden" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "20px", minHeight: 0, overflow: "auto", paddingRight: 2 }}>
           {/* Summary Cards */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
@@ -173,29 +137,17 @@ export default function WindowsAnalysisPage() {
           </div>
 
           </div>
-
-          {showChat && (
-            <div className="surface-panel" style={{ minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column", gap: 12 }}>
-              <div style={{ padding: "10px 12px", border: "1px solid #1f1f1f", borderRadius: 4, background: "#0a0a0a" }}>
-                <div style={{ color: "#888", fontSize: 10, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 6 }}>Attached Threat Context</div>
-                <div style={{ color: selectedThreat ? "#b7d6b7" : "#666", fontSize: 11, lineHeight: 1.45, whiteSpace: "pre-wrap" }}>
-                  {selectedThreatSummary}
-                </div>
-              </div>
-              <div style={{ flex: 1, minHeight: 0 }}>
-                <HawkinsChat
-                  title="Hawkins — Windows Detection"
-                  description="Deep forensic analysis for Sigma detections and suspicious Windows events"
-                  dataSummary={`Sigma matches: ${filteredSigmaMatches.length}. ${selectedThreat ? "A specific threat is attached for deep forensics." : "No threat selected yet."}`}
-                  componentKey="windows-analysis"
-                  helpGuide="Select a timeline event or table row, then ask for root-cause hypotheses, attack chain mapping, and exact next investigative steps."
-                  selectedThreat={selectedThreat}
-                />
-              </div>
-            </div>
-          )}
         </div>
       )}
+
+      <HawkinsChat
+        title="Hawkins — Windows Detection"
+        description="Deep forensic analysis for Sigma detections and suspicious Windows events"
+        dataSummary={`Sigma matches: ${filteredSigmaMatches.length}. ${selectedThreat ? "A specific threat is attached for deep forensics." : "No threat selected yet."}`}
+        componentKey="windows-analysis"
+        helpGuide="Select a timeline event or table row, then ask for root-cause hypotheses, attack chain mapping, and exact next investigative steps."
+        selectedThreat={selectedThreat}
+      />
 
       {selectedThreat && (
         <EventDetailModal

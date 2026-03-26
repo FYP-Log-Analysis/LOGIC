@@ -6,8 +6,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/store";
 
 const NAV_SHARED = [
-  { key: "overview", href: "/overview", label: "Overview", analystOnly: true },
   { key: "projects", href: "/projects", label: "Projects", analystOnly: true },
+  { key: "overview", href: "/overview", label: "Overview", analystOnly: true },
   { key: "agents", href: "/agents", label: "Agents", analystOnly: true, webOnly: true }, // Only for web projects
 ];
 

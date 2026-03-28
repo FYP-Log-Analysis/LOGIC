@@ -3,6 +3,7 @@
 # per-upload JSON files (rule_matches.json, ip_summary.json, etc.).
 # Database lives at data/logic.db
 import json
+import os
 import sqlite3
 import logging
 import shutil
@@ -16,6 +17,11 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DB_PATH      = PROJECT_ROOT / "data" / "logic.db"
 LIVE_UPLOAD_FILENAME = "live-stream.log"
+
+_ALLOWED_SEVERITY_FIELDS = {"severity", "severity_v2", "severity_legacy"}
+_ACTIVE_SEVERITY_FIELD = (os.getenv("LOGIC_SEVERITY_FIELD") or "severity").strip().lower()
+if _ACTIVE_SEVERITY_FIELD not in _ALLOWED_SEVERITY_FIELDS:
+    _ACTIVE_SEVERITY_FIELD = "severity"
 
 
 @contextmanager
@@ -151,10 +157,30 @@ def _load_all_matches(project_id: str | None, upload_id: str | None = None) -> l
     for f in ud.glob(pattern):
         try:
             with open(f, encoding="utf-8") as fh:
-                matches.extend(json.load(fh).get("matches", []))
+                raw_matches = json.load(fh).get("matches", [])
+                for match in raw_matches:
+                    if not isinstance(match, dict):
+                        continue
+                    match = _normalise_match_severity(match)
+                    matches.append(match)
         except Exception:
             pass
     return matches
+
+
+def _normalise_match_severity(match: dict) -> dict:
+    """Ensure `severity` reflects configured active severity field for staged rollout."""
+    if _ACTIVE_SEVERITY_FIELD == "severity":
+        return match
+
+    selected = (match.get(_ACTIVE_SEVERITY_FIELD) or "").strip().lower()
+    if not selected:
+        selected = (match.get("severity") or match.get("severity_v2") or match.get("severity_legacy") or "unknown").strip().lower()
+
+    updated = dict(match)
+    updated["severity"] = selected
+    updated["severity_source_field"] = _ACTIVE_SEVERITY_FIELD
+    return updated
 
 
 def _load_log_summaries(project_id: str | None, upload_id: str | None = None) -> list[dict]:
@@ -1180,7 +1206,6 @@ def delete_project(project_id: str) -> None:
     with _get_conn() as conn:
         conn.execute("DELETE FROM upload_status WHERE project_id = ?", (project_id,))
         conn.execute("DELETE FROM pipeline_runs WHERE project_id = ?", (project_id,))
-        conn.execute("DELETE FROM ip_geo WHERE project_id = ?", (project_id,))
         conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
 
 

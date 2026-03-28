@@ -23,6 +23,14 @@ PROJECT_ROOT  = Path(__file__).resolve().parents[2]
 PROJECTS_ROOT = PROJECT_ROOT / "data" / "projects"
 SIGMA_RULES_DIR = PROJECT_ROOT / "data" / "sigma_rules"
 
+_SEVERITY_RANK = {
+    "unknown": 0,
+    "low": 1,
+    "medium": 2,
+    "high": 3,
+    "critical": 4,
+}
+
 
 def _stream_filtered_entries(src_path: Path, predicate) -> tuple[Path | None, int]:
     count = 0
@@ -63,13 +71,120 @@ def _crs_severity(score: float) -> str:
     return "low"
 
 
+def _normalise_severity(value: str | None) -> str:
+    sev = (value or "unknown").strip().lower()
+    return sev if sev in _SEVERITY_RANK else "unknown"
+
+
+def _max_severity(a: str, b: str) -> str:
+    aa = _normalise_severity(a)
+    bb = _normalise_severity(b)
+    return aa if _SEVERITY_RANK[aa] >= _SEVERITY_RANK[bb] else bb
+
+
+def _min_severity(a: str, b: str) -> str:
+    aa = _normalise_severity(a)
+    bb = _normalise_severity(b)
+    return aa if _SEVERITY_RANK[aa] <= _SEVERITY_RANK[bb] else bb
+
+
+def _parse_crs_tags(tags_raw) -> list[str]:
+    if isinstance(tags_raw, list):
+        return [str(t).strip().lower() for t in tags_raw if str(t).strip()]
+    if isinstance(tags_raw, str):
+        raw = tags_raw.strip()
+        if not raw:
+            return []
+        if raw.startswith("[") and raw.endswith("]"):
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, list):
+                    return [str(t).strip().lower() for t in parsed if str(t).strip()]
+            except Exception:
+                pass
+        return [s.strip().lower() for s in raw.split(",") if s.strip()]
+    return []
+
+
+def _contains_any(haystack: str, needles: tuple[str, ...]) -> bool:
+    return any(n in haystack for n in needles)
+
+
+def _crs_severity_v2(cm: dict) -> tuple[str, dict]:
+    score = float(cm.get("anomaly_score") or 0)
+    severity = _crs_severity(score)
+    details: dict[str, str | int | float] = {
+        "base_severity": severity,
+        "anomaly_score": score,
+    }
+
+    paranoia_level = cm.get("paranoia_level")
+    try:
+        pl = int(paranoia_level)
+    except (TypeError, ValueError):
+        pl = 1
+    details["paranoia_level"] = pl
+
+    if pl >= 3 and score >= 2:
+        severity = _max_severity(severity, "high")
+        details["pl_adjustment"] = "upgrade_to_high"
+
+    tags = _parse_crs_tags(cm.get("tags"))
+    msg = str(cm.get("message") or "").lower()
+    haystack = " ".join(tags + [msg])
+
+    high_risk_tokens = (
+        "attack-sqli",
+        "attack-rce",
+        "attack-xss",
+        "attack-injection",
+        "attack-lfi",
+        "attack-rfi",
+        "attack-protocol",
+        "sql injection",
+        "command injection",
+        "remote file inclusion",
+        "xss",
+        "path traversal",
+    )
+    scanner_tokens = (
+        "attack-reputation-scanner",
+        "scanner",
+        "bot",
+        "crawler",
+        "spider",
+        "reputation",
+    )
+
+    has_high_risk = _contains_any(haystack, high_risk_tokens)
+    has_scanner = _contains_any(haystack, scanner_tokens)
+
+    if has_high_risk:
+        severity = _max_severity(severity, "high")
+        details["tag_adjustment"] = "upgrade_to_high"
+
+    # Cap scanner-only findings to medium unless stronger risk signals exist.
+    if has_scanner and not has_high_risk:
+        severity = _min_severity(severity, "medium")
+        details["scanner_cap"] = "max_medium"
+
+    return severity, details
+
+
 def _crs_to_rule_match(cm: dict) -> dict:
     # Map the raw CRS result dict into the unified rule_matches.json format
     orig = cm.get("original_entry") or {}
+    anomaly_score = float(cm.get("anomaly_score") or 0)
+    legacy_severity = _crs_severity(anomaly_score)
+    severity_v2, mapping_details = _crs_severity_v2(cm)
     return {
         "rule_id":       f"CRS-{cm.get('rule_id', 'unknown')}",
         "rule_title":    f"[CRS] {cm.get('message', 'ModSecurity Rule')}",
-        "severity":      _crs_severity(float(cm.get("anomaly_score") or 0)),
+        "severity":      legacy_severity,
+        "severity_legacy": legacy_severity,
+        "severity_v2":   severity_v2,
+        "severity_mapping_version": 2,
+        "severity_v2_details": mapping_details,
         "client_ip":     cm.get("client_ip") or orig.get("client_ip", "N/A"),
         "timestamp":     cm.get("timestamp") or orig.get("timestamp", "N/A"),
         "method":        cm.get("method") or orig.get("http_method"),
@@ -77,7 +192,8 @@ def _crs_to_rule_match(cm: dict) -> dict:
         "status_code":   orig.get("status_code"),
         "user_agent":    orig.get("user_agent"),
         "entry":         orig,
-        "anomaly_score": cm.get("anomaly_score", 0),
+        "anomaly_score": anomaly_score,
+        "paranoia_level": cm.get("paranoia_level"),
         "crs_tags":      cm.get("tags", "[]"),
     }
 
@@ -100,6 +216,12 @@ def _write_results(
         "sigma_matches": sigma_count,
         "detector":      detector,
         "detector_status": detector_status,
+        "severity_mapping": {
+            "active_default": "severity",
+            "legacy_field": "severity",
+            "candidate_field": "severity_v2",
+            "version": 2,
+        },
     }
     if warning:
         results_data["warning"] = warning

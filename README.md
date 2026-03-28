@@ -30,8 +30,6 @@ It combines ingestion, normalization, rule matching, behavioral analytics, and a
    - Downloadable sender script used by live stream workflows
 5. data
    - Runtime data, rules, uploads, detection outputs, and logic.db
-6. grafana
-   - Provisioning and local Grafana configuration
 
 ## Runtime Model
 
@@ -69,16 +67,10 @@ Default local endpoints:
 2. API: http://localhost:4000
 3. API OpenAPI docs: http://localhost:4000/docs
 
-Optional Grafana (local process):
-
-1. Start: ./run_grafana.sh
-2. URL: http://localhost:3002
-
 ## Production (Host Processes, No Docker)
 
 1. Configure .env with production-safe values:
    - JWT_SECRET_KEY
-   - GRAFANA_PASSWORD
    - ALLOWED_ORIGINS
 2. Start production script:
    - ./run_prod.sh
@@ -87,10 +79,6 @@ Current behavior:
 
 1. FastAPI starts with multiple workers
 2. Next.js runs in production mode
-
-Grafana can still be started separately with:
-
-1. ./run_grafana.sh
 
 ## Production (Docker Compose)
 
@@ -103,7 +91,6 @@ Container defaults:
 1. API: 4000
 2. Frontend: 3001
 3. CRS detector: 8080
-4. Grafana: 3000
 
 ## Data and Cleanup Safety
 

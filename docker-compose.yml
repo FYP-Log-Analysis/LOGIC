@@ -74,26 +74,3 @@ services:
     restart: unless-stopped
     mem_limit: 256m
 
-  grafana:
-    image: grafana/grafana-oss:10.4.2
-    container_name: logic-grafana
-    ports:
-      - "3000:3000"
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning
-    environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-logic1234}
-      - LOGIC_API_URL=http://api:4000
-      - GF_INSTALL_PLUGINS=yesoreyeram-infinity-datasource
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
-      - GF_USERS_ALLOW_SIGN_UP=false
-    depends_on:
-      - api
-    restart: unless-stopped
-    mem_limit: 256m
-
-volumes:
-  grafana_data:

@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import upload, analysis
-from api.routes.search import router as search_router, grafana as grafana_router
+from api.routes.search import router as search_router
 from api.routes.behavioral import router as behavioral_router
 from api.routes.chat import router as chat_router
 from api.routes.auth import router as auth_router
@@ -76,7 +76,6 @@ app.include_router(receiver_router,     prefix="/api")
 app.include_router(logicx_router,       prefix="/api")
 app.include_router(agent_download_router, prefix="/api")
 app.include_router(search_router,       prefix="/api")
-app.include_router(grafana_router,      prefix="/api")
 
 
 @app.get("/")

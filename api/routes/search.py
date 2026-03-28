@@ -12,11 +12,10 @@ from core.storage.sqlite_store import (
     query_detections,
     get_overview_stats,
     get_detection_aggregations,
-    get_log_statistics,
 )
 from api.deps import UserInDB, get_current_user
 
-router = APIRouter(prefix="/search", tags=["Search & Grafana"])
+router = APIRouter(prefix="/search", tags=["Search"])
 
 
 def _assert_project_type(project_id: str | None, required_type: str) -> None:
@@ -119,109 +118,3 @@ def get_detection_aggs(
         project_id=project_id, upload_id=upload_id,
         start_ts=start_ts, end_ts=end_ts,
     )
-
-
-# Grafana plugin: "SimpleJSON" (grafana-simple-json-datasource)
-# Expose at /api/search/grafana/*
-
-grafana = APIRouter(prefix="/search/grafana", tags=["Grafana SimpleJSON"])
-
-
-@grafana.get("/")
-def grafana_health() -> str:
-    return "OK"
-
-
-@grafana.get("/overview")
-def grafana_overview(project_id: str | None = Query(None)) -> dict[str, Any]:
-    """Public read-only payload for Grafana dashboards."""
-    return get_overview_stats(project_id=project_id)
-
-
-@grafana.get("/detection-aggregations")
-def grafana_detection_aggregations(project_id: str | None = Query(None)) -> dict[str, Any]:
-    """Public read-only detection aggregations for Grafana."""
-    return get_detection_aggregations(project_id=project_id)
-
-
-@grafana.get("/log-statistics")
-def grafana_log_statistics(project_id: str | None = Query(None)) -> dict[str, Any]:
-    """Public read-only log statistics for Grafana."""
-    return get_log_statistics(project_id=project_id)
-
-
-@grafana.post("/search")
-def grafana_search() -> list[str]:
-    return [
-        "detections_total",
-        "critical_detections",
-        "high_detections",
-        "detections_by_severity",
-        "top_offending_ips",
-    ]
-
-
-@grafana.post("/query")
-def grafana_query(body: dict[str, Any]) -> list[dict[str, Any]]:
-    # Accept an optional project_id in the Grafana query body for project-scoped stats
-    project_id = body.get("project_id") or None
-    stats   = get_stats(project_id=project_id)
-    now_ms  = int(time.time() * 1000)
-    results = []
-
-    for target_obj in body.get("targets", []):
-        target = target_obj.get("target", "")
-
-        if target == "detections_total":
-            results.append({
-                "target": "Total Detections",
-                "datapoints": [[stats["total_detections"], now_ms]],
-            })
-
-
-        elif target == "critical_detections":
-            count = stats["detections_by_severity"].get("critical", 0)
-            results.append({
-                "target": "Critical Detections",
-                "datapoints": [[count, now_ms]],
-            })
-
-        elif target == "high_detections":
-            count = stats["detections_by_severity"].get("high", 0)
-            results.append({
-                "target": "High Detections",
-                "datapoints": [[count, now_ms]],
-            })
-
-        elif target == "detections_by_severity":
-            results.append({
-                "columns": [
-                    {"text": "Severity", "type": "string"},
-                    {"text": "Count",    "type": "number"},
-                ],
-                "rows": [
-                    [sev, cnt]
-                    for sev, cnt in stats["detections_by_severity"].items()
-                ],
-                "type": "table",
-            })
-
-        elif target == "top_offending_ips":
-            results.append({
-                "columns": [
-                    {"text": "IP Address", "type": "string"},
-                    {"text": "Hit Count",  "type": "number"},
-                ],
-                "rows": [
-                    [row["client_ip"], row["hit_count"]]
-                    for row in stats["top_offending_ips"]
-                ],
-                "type": "table",
-            })
-
-    return results
-
-
-@grafana.post("/annotations")
-def grafana_annotations(body: dict[str, Any]) -> list:
-    return []

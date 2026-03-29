@@ -84,13 +84,28 @@ function getCrsCategory(ruleId?: string, ruleTitle?: string): string {
   return "Other";
 }
 
+const panelStyle = {
+  background: "#0d0d0d",
+  border: "1px solid #1e1e1e",
+  borderRadius: 6,
+  padding: "16px 20px",
+} as const;
+
+const panelTitleStyle = {
+  fontSize: 11,
+  color: "#666",
+  letterSpacing: 1,
+  textTransform: "uppercase" as const,
+  marginBottom: 12,
+};
+
 // ─── Matrix Cell ──────────────────────────────────────────────────────────────
 
 function MatrixCell({ hit, color }: { hit: boolean; color?: string }) {
   return (
     <div style={{
-      background: hit ? (color ?? "#7c3aed22") : "#0d1117",
-      border: `1px solid ${hit ? (color ?? "#7c3aed") : "#1c1c30"}`,
+      background: hit ? (color ?? "#44444422") : "#0a0a0a",
+      border: `1px solid ${hit ? (color ?? "#666") : "#1e1e1e"}`,
       borderRadius: 4,
       width: "100%",
       height: 28,
@@ -203,9 +218,9 @@ export default function CorrelationPage() {
 
   if (loading) {
     return (
-      <div style={{ padding: "24px 28px", display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <Spinner />
-        <span style={{ color: "#8b8fa8" }}>Loading correlation data…</span>
+        <span style={{ color: "#666" }}>Loading correlation data...</span>
       </div>
     );
   }
@@ -216,11 +231,8 @@ export default function CorrelationPage() {
   const highCount = ipRows.filter((r) => r.highestSev === "HIGH").length;
 
   // Category breakdown across all IPs
-  const categoryGroups: Record<string, Set<string>> = {};
-  // (computed outside render for clarity)
-
   return (
-    <div style={{ padding: "24px 28px", fontFamily: "Inter, sans-serif" }}>
+    <div className="page-shell">
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
         <SectionHeader
           title="Cross-Module Correlation"
@@ -232,18 +244,18 @@ export default function CorrelationPage() {
       </div>
 
       {/* KPI Row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
-        <MetricCard label="Known IPs" value={totalIps} sub="from rule matches" accent="#7c3aed" />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 24 }}>
+        <MetricCard label="Known IPs" value={totalIps} sub="from rule matches" accent="#c0c0c0" />
         <MetricCard label="Correlated IPs" value={correlatedRows.length} sub="rules + behavioral" accent="#22c55e" />
         <MetricCard label="Critical Severity" value={criticalCount} sub="highest-severity IPs" accent="#ff4c4c" />
         <MetricCard label="High Severity" value={highCount} sub="high-severity IPs" accent="#ff9800" />
       </div>
 
       {/* High Confidence Threat Actors */}
-      <div style={{ background: "#1a1a2e", border: "1px solid #2d2d4e", borderRadius: 10, padding: "16px 20px", marginBottom: 24 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "#8b8fa8", marginBottom: 12, textTransform: "uppercase", letterSpacing: 1 }}>
+      <div style={{ ...panelStyle, marginBottom: 24 }}>
+        <div style={panelTitleStyle}>
           High Confidence Threat Actors
-          <span style={{ marginLeft: 10, color: "#22c55e", fontSize: 11 }}>({correlatedRows.length} correlated IPs)</span>
+          <span style={{ marginLeft: 10, color: "#7cb342", fontSize: 11 }}>({correlatedRows.length} correlated IPs)</span>
         </div>
         {correlatedRows.length === 0 ? (
           <div style={{ color: "#6b7280", fontSize: 13 }}>No IPs found in both rule matches and behavioral analysis.</div>
@@ -251,7 +263,7 @@ export default function CorrelationPage() {
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
-                <tr style={{ borderBottom: "1px solid #2d2d4e", color: "#8b8fa8" }}>
+                <tr style={{ borderBottom: "1px solid #2a2a2a", color: "#666" }}>
                   <th style={{ textAlign: "left", padding: "6px 10px" }}>IP Address</th>
                   <th style={{ textAlign: "center", padding: "6px 10px" }}>Rule Matches</th>
                   <th style={{ textAlign: "center", padding: "6px 10px" }}>Severity</th>
@@ -263,25 +275,25 @@ export default function CorrelationPage() {
               </thead>
               <tbody>
                 {correlatedRows.map((row) => (
-                  <tr key={row.ip} style={{ borderBottom: "1px solid #1e2040" }}>
-                    <td style={{ padding: "7px 10px", color: "#c89bff", fontFamily: "monospace", fontWeight: 700 }}>
+                  <tr key={row.ip} style={{ borderBottom: "1px solid #1a1a1a" }}>
+                    <td style={{ padding: "7px 10px", color: "#c0c0c0", fontFamily: "monospace", fontWeight: 700 }}>
                       {row.ip}
                       {row.highestSev === "CRITICAL" && (
                         <span style={{ marginLeft: 6, background: "#ff4c4c22", color: "#ff4c4c", borderRadius: 4, padding: "1px 6px", fontSize: 10, fontWeight: 700 }}>CRITICAL</span>
                       )}
                     </td>
-                    <td style={{ padding: "7px 10px", textAlign: "center", color: "#e0e0ff" }}>{row.ruleMatchCount}</td>
+                    <td style={{ padding: "7px 10px", textAlign: "center", color: "#d0d0d0" }}>{row.ruleMatchCount}</td>
                     <td style={{ padding: "7px 10px", textAlign: "center" }}>
                       <StatusBadge status={row.highestSev} />
                     </td>
                     <td style={{ padding: "7px 10px", textAlign: "center" }}>
-                      <span style={{ color: row.rateSpike ? "#ff9800" : "#3d3d5c" }}>{row.rateSpike ? "●" : "○"}</span>
+                      <span style={{ color: row.rateSpike ? "#ff9800" : "#333" }}>{row.rateSpike ? "●" : "○"}</span>
                     </td>
                     <td style={{ padding: "7px 10px", textAlign: "center" }}>
-                      <span style={{ color: row.urlEnum ? "#2196f3" : "#3d3d5c" }}>{row.urlEnum ? "●" : "○"}</span>
+                      <span style={{ color: row.urlEnum ? "#2196f3" : "#333" }}>{row.urlEnum ? "●" : "○"}</span>
                     </td>
                     <td style={{ padding: "7px 10px", textAlign: "center" }}>
-                      <span style={{ color: row.visitorAnomaly ? "#e91e63" : "#3d3d5c" }}>{row.visitorAnomaly ? "●" : "○"}</span>
+                      <span style={{ color: row.visitorAnomaly ? "#e91e63" : "#333" }}>{row.visitorAnomaly ? "●" : "○"}</span>
                     </td>
                     <td style={{ padding: "7px 10px", textAlign: "right", fontWeight: 700, color: row.riskScore >= 20 ? "#ff4c4c" : row.riskScore >= 10 ? "#ff9800" : "#8bc34a" }}>
                       {row.riskScore}
@@ -295,27 +307,27 @@ export default function CorrelationPage() {
       </div>
 
       {/* Detection Coverage Matrix */}
-      <div style={{ background: "#1a1a2e", border: "1px solid #2d2d4e", borderRadius: 10, padding: "16px 20px", marginBottom: 24 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "#8b8fa8", marginBottom: 14, textTransform: "uppercase", letterSpacing: 1 }}>
+      <div style={{ ...panelStyle, marginBottom: 24 }}>
+        <div style={{ ...panelTitleStyle, marginBottom: 14 }}>
           Detection Coverage Matrix
-          <span style={{ marginLeft: 10, color: "#6b7280", fontSize: 11, fontWeight: 400 }}>Top 15 IPs × Detection Modules</span>
+          <span style={{ marginLeft: 10, color: "#666", fontSize: 11, fontWeight: 400 }}>Top 15 IPs × Detection Modules</span>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ borderCollapse: "collapse", fontSize: 11, minWidth: 700 }}>
             <thead>
               <tr>
-                <th style={{ padding: "6px 10px", color: "#8b8fa8", textAlign: "left", minWidth: 120 }}>IP</th>
+                <th style={{ padding: "6px 10px", color: "#666", textAlign: "left", minWidth: 120 }}>IP</th>
                 {["Rule Match", "Rate Spike", "URL Enum", "Visitor Anomaly", "High/Critical"].map((col) => (
-                  <th key={col} style={{ padding: "6px 8px", color: "#8b8fa8", textAlign: "center", minWidth: 90 }}>{col}</th>
+                  <th key={col} style={{ padding: "6px 8px", color: "#666", textAlign: "center", minWidth: 90 }}>{col}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {ipRows.slice(0, 15).map((row) => (
-                <tr key={row.ip} style={{ borderBottom: "1px solid #1a1a2e" }}>
-                  <td style={{ padding: "4px 10px", color: "#c89bff", fontFamily: "monospace", fontSize: 11 }}>{row.ip}</td>
+                <tr key={row.ip} style={{ borderBottom: "1px solid #161616" }}>
+                  <td style={{ padding: "4px 10px", color: "#c0c0c0", fontFamily: "monospace", fontSize: 11 }}>{row.ip}</td>
                   <td style={{ padding: "4px 6px" }}>
-                    <MatrixCell hit={row.ruleMatchCount > 0} color="#7c3aed" />
+                    <MatrixCell hit={row.ruleMatchCount > 0} color="#808080" />
                   </td>
                   <td style={{ padding: "4px 6px" }}>
                     <MatrixCell hit={row.rateSpike} color="#ff9800" />
@@ -336,13 +348,13 @@ export default function CorrelationPage() {
         </div>
         <div style={{ display: "flex", gap: 16, marginTop: 12, flexWrap: "wrap" }}>
           {[
-            { label: "Rule Match", color: "#7c3aed" },
+            { label: "Rule Match", color: "#808080" },
             { label: "Rate Spike", color: "#ff9800" },
             { label: "URL Enum", color: "#2196f3" },
             { label: "Visitor Anomaly", color: "#e91e63" },
             { label: "High/Critical", color: "#ff4c4c" },
           ].map(({ label, color }) => (
-            <span key={label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#8b8fa8" }}>
+            <span key={label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#666" }}>
               <span style={{ width: 10, height: 10, background: color, borderRadius: 2, display: "inline-block" }} />
               {label}
             </span>
@@ -352,18 +364,18 @@ export default function CorrelationPage() {
 
       {/* Rule × IP Heatmap */}
       {heatRules.length > 0 && heatIps.length > 0 && (
-        <div style={{ background: "#1a1a2e", border: "1px solid #2d2d4e", borderRadius: 10, padding: "16px 20px", marginBottom: 24 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "#8b8fa8", marginBottom: 14, textTransform: "uppercase", letterSpacing: 1 }}>
+        <div style={{ ...panelStyle, marginBottom: 24 }}>
+          <div style={{ ...panelTitleStyle, marginBottom: 14 }}>
             Rule × IP Heatmap
-            <span style={{ marginLeft: 10, color: "#6b7280", fontSize: 11, fontWeight: 400 }}>Match count — darker = higher</span>
+            <span style={{ marginLeft: 10, color: "#666", fontSize: 11, fontWeight: 400 }}>Match count — darker = higher</span>
           </div>
           <div style={{ overflowX: "auto" }}>
             <table style={{ borderCollapse: "collapse", fontSize: 10 }}>
               <thead>
                 <tr>
-                  <th style={{ padding: "4px 8px", color: "#8b8fa8", textAlign: "left", minWidth: 100 }}>Rule ID</th>
+                  <th style={{ padding: "4px 8px", color: "#666", textAlign: "left", minWidth: 100 }}>Rule ID</th>
                   {heatIps.map((ip) => (
-                    <th key={ip} style={{ padding: "4px 4px", color: "#6b7280", textAlign: "center", minWidth: 56, maxWidth: 56, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={ip}>
+                    <th key={ip} style={{ padding: "4px 4px", color: "#666", textAlign: "center", minWidth: 56, maxWidth: 56, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={ip}>
                       {ip.length > 12 ? ip.slice(-8) : ip}
                     </th>
                   ))}
@@ -372,7 +384,7 @@ export default function CorrelationPage() {
               <tbody>
                 {heatRules.map((ruleId) => (
                   <tr key={ruleId}>
-                    <td style={{ padding: "3px 8px", color: "#c89bff", fontFamily: "monospace", fontSize: 10 }}>{ruleId}</td>
+                    <td style={{ padding: "3px 8px", color: "#c0c0c0", fontFamily: "monospace", fontSize: 10 }}>{ruleId}</td>
                     {heatIps.map((ip) => {
                       const count = heatGrid[ruleId]?.[ip] ?? 0;
                       return (
@@ -403,14 +415,14 @@ export default function CorrelationPage() {
       )}
 
       {/* All IPs Table */}
-      <div style={{ background: "#1a1a2e", border: "1px solid #2d2d4e", borderRadius: 10, padding: "16px 20px" }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "#8b8fa8", marginBottom: 12, textTransform: "uppercase", letterSpacing: 1 }}>
+      <div style={panelStyle}>
+        <div style={panelTitleStyle}>
           All Threat Actors by Risk Score ({ipRows.length} IPs)
         </div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
-              <tr style={{ borderBottom: "1px solid #2d2d4e", color: "#8b8fa8" }}>
+              <tr style={{ borderBottom: "1px solid #2a2a2a", color: "#666" }}>
                 <th style={{ textAlign: "left", padding: "6px 10px" }}>IP</th>
                 <th style={{ textAlign: "center", padding: "6px 10px" }}>Matches</th>
                 <th style={{ textAlign: "center", padding: "6px 10px" }}>Severity</th>
@@ -422,17 +434,17 @@ export default function CorrelationPage() {
               {ipRows.map((row) => {
                 const modules = [row.rateSpike && "R", row.urlEnum && "U", row.visitorAnomaly && "V"].filter(Boolean);
                 return (
-                  <tr key={row.ip} style={{ borderBottom: "1px solid #161628" }}>
-                    <td style={{ padding: "6px 10px", color: "#c89bff", fontFamily: "monospace" }}>
+                  <tr key={row.ip} style={{ borderBottom: "1px solid #161616" }}>
+                    <td style={{ padding: "6px 10px", color: "#c0c0c0", fontFamily: "monospace" }}>
                       {row.ip}
-                      {row.isCorrelated && <span style={{ marginLeft: 6, color: "#22c55e", fontSize: 10, fontWeight: 700 }}>CORRELATED</span>}
+                      {row.isCorrelated && <span style={{ marginLeft: 6, color: "#7cb342", fontSize: 10, fontWeight: 700 }}>CORRELATED</span>}
                     </td>
-                    <td style={{ padding: "6px 10px", textAlign: "center", color: "#e0e0ff" }}>{row.ruleMatchCount}</td>
+                    <td style={{ padding: "6px 10px", textAlign: "center", color: "#d0d0d0" }}>{row.ruleMatchCount}</td>
                     <td style={{ padding: "6px 10px", textAlign: "center" }}>
                       <span style={{ color: severityColor(row.highestSev), fontWeight: 700, fontSize: 11 }}>{row.highestSev}</span>
                     </td>
                     <td style={{ padding: "6px 10px", textAlign: "center" }}>
-                      <span style={{ fontFamily: "monospace", color: "#8b8fa8", fontSize: 11 }}>
+                      <span style={{ fontFamily: "monospace", color: "#666", fontSize: 11 }}>
                         {modules.length > 0 ? modules.join("+") : "—"}
                       </span>
                     </td>

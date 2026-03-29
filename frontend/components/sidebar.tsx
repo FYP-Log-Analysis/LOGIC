@@ -35,6 +35,12 @@ const NAV_WINDOWS = [
     label: "Anomalous Windows",
     analystOnly: true,
   },
+  {
+    key: "windows-correlation",
+    href: "/windows-correlation",
+    label: "Attack Chains",
+    analystOnly: true,
+  },
 ];
 
 const NAV_COMMON = [
@@ -58,12 +64,6 @@ const NAV_COMMON = [
     label: "Log Statistics",
     analystOnly: true,
     webOnly: true,
-  },
-  {
-    key: "ai-insights",
-    href: "/ai-insights",
-    label: "AI Insights",
-    analystOnly: true,
   },
   { key: "admin", href: "/admin", label: "Admin", adminOnly: true },
 ];

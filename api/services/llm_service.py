@@ -26,6 +26,8 @@ def _build_summary(detection_data: Dict) -> str:
     ips: set = set()
 
     for m in matches:
+        # NOTE: The 'severity' field in matches is already normalized by _normalise_match_severity()
+        # to reflect the active severity field (severity_v2 by default)
         sev = m.get("severity", "unknown").lower()
         severity_counts[sev] = severity_counts.get(sev, 0) + 1
         rule = m.get("rule_title", "Unknown")
@@ -110,6 +112,8 @@ def analyse_specific_match(match_data: Dict) -> Dict:
     try:
         client = _get_client()
         entry  = match_data.get("entry", {})
+        # NOTE: The 'severity' field is already normalized by _normalise_match_severity()
+        # to reflect the active severity field (severity_v2 by default)
         user_prompt = (
             f"Analyse this web server security detection:\n\n"
             f"Rule     : {match_data.get('rule_title')}\n"

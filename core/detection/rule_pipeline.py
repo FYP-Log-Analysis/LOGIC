@@ -180,7 +180,7 @@ def _crs_to_rule_match(cm: dict) -> dict:
     return {
         "rule_id":       f"CRS-{cm.get('rule_id', 'unknown')}",
         "rule_title":    f"[CRS] {cm.get('message', 'ModSecurity Rule')}",
-        "severity":      legacy_severity,
+        "severity":      severity_v2,  # FIXED: Use v2 mapping with risk analysis
         "severity_legacy": legacy_severity,
         "severity_v2":   severity_v2,
         "severity_mapping_version": 2,
@@ -217,9 +217,9 @@ def _write_results(
         "detector":      detector,
         "detector_status": detector_status,
         "severity_mapping": {
-            "active_default": "severity",
-            "legacy_field": "severity",
-            "candidate_field": "severity_v2",
+            "active_default": "severity_v2",  # FIXED: Reflects v2 is now active
+            "legacy_field": "severity_legacy",
+            "v2_field": "severity_v2",
             "version": 2,
         },
     }

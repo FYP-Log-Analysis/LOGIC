@@ -15,6 +15,7 @@ from api.routes.admin import router as admin_router
 from api.routes.receiver import router as receiver_router
 from api.routes.logicx import router as logicx_router
 from api.routes.agent_download import router as agent_download_router
+from api.routes.windows_analysis import router as windows_analysis_router
 from core.storage.sqlite_store import (
     init_db,
     get_user_by_username,
@@ -67,6 +68,7 @@ def on_startup() -> None:
 
 app.include_router(upload.router,       prefix="/api")
 app.include_router(analysis.router,     prefix="/api/analysis")
+app.include_router(windows_analysis_router, prefix="/api/analysis")
 app.include_router(behavioral_router,   prefix="/api/analysis")
 app.include_router(chat_router,         prefix="/api/analysis")
 app.include_router(auth_router,         prefix="/api/auth")

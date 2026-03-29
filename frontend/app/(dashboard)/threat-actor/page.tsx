@@ -84,6 +84,21 @@ function severityColor(sev?: string): string {
   }
 }
 
+const panelStyle = {
+  background: "#0d0d0d",
+  border: "1px solid #1e1e1e",
+  borderRadius: 6,
+  padding: "16px 20px",
+} as const;
+
+const panelTitleStyle = {
+  fontSize: 11,
+  color: "#666",
+  letterSpacing: 1,
+  textTransform: "uppercase" as const,
+  marginBottom: 12,
+};
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ThreatActorPage() {
@@ -236,7 +251,7 @@ export default function ThreatActorPage() {
   );
 
   return (
-    <div style={{ padding: "24px 28px", fontFamily: "Inter, sans-serif" }}>
+    <div className="page-shell">
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
         <SectionHeader
           title="Threat Actor Profile"
@@ -248,8 +263,8 @@ export default function ThreatActorPage() {
       </div>
 
       {/* IP Selection */}
-      <div style={{ background: "#1a1a2e", border: "1px solid #2d2d4e", borderRadius: 10, padding: "16px 20px", marginBottom: 24 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "#8b8fa8", marginBottom: 10, textTransform: "uppercase", letterSpacing: 1 }}>
+      <div style={{ ...panelStyle, marginBottom: 24 }}>
+        <div style={{ ...panelTitleStyle, marginBottom: 10 }}>
           Select IP to Profile ({knownIps.length} known threat actors)
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -267,10 +282,10 @@ export default function ThreatActorPage() {
                 key={ip}
                 onClick={() => { selectIp(ip); setSearchQuery(""); }}
                 style={{
-                  background: selectedIp === ip ? "#7c3aed" : "#16213e",
-                  color: selectedIp === ip ? "#fff" : "#a0a8c0",
-                  border: `1px solid ${selectedIp === ip ? "#7c3aed" : "#2d2d4e"}`,
-                  borderRadius: 6,
+                  background: selectedIp === ip ? "#1a3a1a" : "#111",
+                  color: selectedIp === ip ? "#7cb342" : "#888",
+                  border: `1px solid ${selectedIp === ip ? "#355a3b" : "#2a2a2a"}`,
+                  borderRadius: 4,
                   padding: "4px 12px",
                   fontSize: 12,
                   cursor: "pointer",
@@ -282,8 +297,8 @@ export default function ThreatActorPage() {
           </div>
         )}
         {selectedIp && (
-          <div style={{ marginTop: 10, fontSize: 13, color: "#a0a8c0" }}>
-            Profiling: <span style={{ color: "#c89bff", fontWeight: 700 }}>{selectedIp}</span>
+          <div style={{ marginTop: 10, fontSize: 13, color: "#888" }}>
+            Profiling: <span style={{ color: "#c0c0c0", fontWeight: 700 }}>{selectedIp}</span>
           </div>
         )}
       </div>
@@ -297,12 +312,12 @@ export default function ThreatActorPage() {
       {selectedIp && (
         <>
           {/* KPI Row */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 24 }}>
             <MetricCard
               label="Rule Matches"
               value={ipMatches.length}
               sub="detections triggered"
-              accent="#7c3aed"
+              accent="#c0c0c0"
             />
             <MetricCard
               label="Unique Paths Targeted"
@@ -331,8 +346,8 @@ export default function ThreatActorPage() {
           </div>
 
           {/* Detection Coverage Badges */}
-          <div style={{ background: "#1a1a2e", border: "1px solid #2d2d4e", borderRadius: 10, padding: "14px 20px", marginBottom: 24 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#8b8fa8", marginBottom: 10, textTransform: "uppercase", letterSpacing: 1 }}>
+          <div style={{ ...panelStyle, padding: "14px 20px", marginBottom: 24 }}>
+            <div style={{ ...panelTitleStyle, marginBottom: 10 }}>
               Detection Module Coverage
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -346,9 +361,9 @@ export default function ThreatActorPage() {
                 <span
                   key={label}
                   style={{
-                    background: hit ? "#0e2a1a" : "#1c1c30",
-                    border: `1px solid ${hit ? "#22c55e" : "#3d3d5c"}`,
-                    color: hit ? "#22c55e" : "#6b7280",
+                    background: hit ? "#0f180f" : "#111",
+                    border: `1px solid ${hit ? "#2a5a2a" : "#2a2a2a"}`,
+                    color: hit ? "#7cb342" : "#666",
                     borderRadius: 20,
                     padding: "4px 14px",
                     fontSize: 12,
@@ -362,34 +377,34 @@ export default function ThreatActorPage() {
           </div>
 
           {/* Attack Categories + First/Last Seen */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
-            <div style={{ background: "#1a1a2e", border: "1px solid #2d2d4e", borderRadius: 10, padding: "14px 20px" }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#8b8fa8", marginBottom: 10, textTransform: "uppercase", letterSpacing: 1 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginBottom: 24 }}>
+            <div style={{ ...panelStyle, padding: "14px 20px" }}>
+              <div style={{ ...panelTitleStyle, marginBottom: 10 }}>
                 Attack Categories
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {attackCategories.length > 0 ? attackCategories.map((cat) => (
-                  <Badge key={cat} label={cat} />
+                  <Badge key={cat} label={cat} color="#888" />
                 )) : <span style={{ color: "#6b7280", fontSize: 13 }}>None detected</span>}
               </div>
             </div>
-            <div style={{ background: "#1a1a2e", border: "1px solid #2d2d4e", borderRadius: 10, padding: "14px 20px" }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#8b8fa8", marginBottom: 10, textTransform: "uppercase", letterSpacing: 1 }}>
+            <div style={{ ...panelStyle, padding: "14px 20px" }}>
+              <div style={{ ...panelTitleStyle, marginBottom: 10 }}>
                 Activity Window
               </div>
               {loadingProfile ? <Spinner /> : (
                 <div style={{ fontSize: 13, lineHeight: 2 }}>
-                  <div><span style={{ color: "#6b7280" }}>First seen: </span><span style={{ color: "#c89bff" }}>{ipProfile?.first_seen ?? "N/A"}</span></div>
-                  <div><span style={{ color: "#6b7280" }}>Last seen: </span><span style={{ color: "#c89bff" }}>{ipProfile?.last_seen ?? "N/A"}</span></div>
-                  <div><span style={{ color: "#6b7280" }}>Total requests: </span><span style={{ color: "#c89bff" }}>{ipProfile?.request_count ?? "N/A"}</span></div>
+                  <div><span style={{ color: "#666" }}>First seen: </span><span style={{ color: "#c0c0c0" }}>{ipProfile?.first_seen ?? "N/A"}</span></div>
+                  <div><span style={{ color: "#666" }}>Last seen: </span><span style={{ color: "#c0c0c0" }}>{ipProfile?.last_seen ?? "N/A"}</span></div>
+                  <div><span style={{ color: "#666" }}>Total requests: </span><span style={{ color: "#c0c0c0" }}>{ipProfile?.request_count ?? "N/A"}</span></div>
                 </div>
               )}
             </div>
           </div>
 
           {/* Detection Timeline */}
-          <div style={{ background: "#1a1a2e", border: "1px solid #2d2d4e", borderRadius: 10, padding: "16px 20px", marginBottom: 24 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#8b8fa8", marginBottom: 12, textTransform: "uppercase", letterSpacing: 1 }}>
+          <div style={{ ...panelStyle, marginBottom: 24 }}>
+            <div style={panelTitleStyle}>
               Threat Timeline
             </div>
             <ThreatTimeline
@@ -401,9 +416,9 @@ export default function ThreatActorPage() {
           </div>
 
           {/* Rules Triggered & Top Paths */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
-            <div style={{ background: "#1a1a2e", border: "1px solid #2d2d4e", borderRadius: 10, padding: "16px 20px", overflow: "hidden" }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#8b8fa8", marginBottom: 12, textTransform: "uppercase", letterSpacing: 1 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16, marginBottom: 24 }}>
+            <div style={{ ...panelStyle, overflow: "hidden" }}>
+              <div style={panelTitleStyle}>
                 Rules Triggered ({ruleFreq.length})
               </div>
               {ruleFreq.length === 0
@@ -412,7 +427,7 @@ export default function ThreatActorPage() {
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                       <thead>
-                        <tr style={{ borderBottom: "1px solid #2d2d4e", color: "#8b8fa8" }}>
+                        <tr style={{ borderBottom: "1px solid #2a2a2a", color: "#666" }}>
                           <th style={{ textAlign: "left", padding: "6px 8px" }}>Rule ID</th>
                           <th style={{ textAlign: "left", padding: "6px 8px" }}>Title</th>
                           <th style={{ textAlign: "left", padding: "6px 8px" }}>Sev</th>
@@ -421,11 +436,11 @@ export default function ThreatActorPage() {
                       </thead>
                       <tbody>
                         {ruleFreq.slice(0, 15).map(([id, d]) => (
-                          <tr key={id} style={{ borderBottom: "1px solid #1e2040" }}>
-                            <td style={{ padding: "6px 8px", color: "#c89bff", fontFamily: "monospace" }}>{id}</td>
-                            <td style={{ padding: "6px 8px", color: "#a0a8c0", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.title}>{d.title ?? "—"}</td>
+                          <tr key={id} style={{ borderBottom: "1px solid #1a1a1a" }}>
+                            <td style={{ padding: "6px 8px", color: "#c0c0c0", fontFamily: "monospace" }}>{id}</td>
+                            <td style={{ padding: "6px 8px", color: "#999", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.title}>{d.title ?? "—"}</td>
                             <td style={{ padding: "6px 8px" }}><StatusBadge status={d.sev ?? "LOW"} /></td>
-                            <td style={{ padding: "6px 8px", color: "#e0e0ff", textAlign: "right", fontWeight: 700 }}>{d.count}</td>
+                            <td style={{ padding: "6px 8px", color: "#d0d0d0", textAlign: "right", fontWeight: 700 }}>{d.count}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -439,39 +454,39 @@ export default function ThreatActorPage() {
                 )}
             </div>
 
-            <div style={{ background: "#1a1a2e", border: "1px solid #2d2d4e", borderRadius: 10, padding: "16px 20px" }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#8b8fa8", marginBottom: 12, textTransform: "uppercase", letterSpacing: 1 }}>
+            <div style={{ ...panelStyle }}>
+              <div style={panelTitleStyle}>
                 Top Targeted Paths
               </div>
               {topPaths.length === 0
                 ? <span style={{ color: "#6b7280", fontSize: 13 }}>No path data available.</span>
-                : <BarChart labels={topPaths.map((p) => p.label)} values={topPaths.map((p) => p.count)} color="#7c3aed" horizontal />}
+                : <BarChart labels={topPaths.map((p) => p.label)} values={topPaths.map((p) => p.count)} color="#7cb342" horizontal />}
             </div>
           </div>
 
           {/* Behavioral Events */}
           {totalBehEvents > 0 && (
-            <div style={{ background: "#1a1a2e", border: "1px solid #2d2d4e", borderRadius: 10, padding: "16px 20px", marginBottom: 24 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#8b8fa8", marginBottom: 12, textTransform: "uppercase", letterSpacing: 1 }}>
+            <div style={{ ...panelStyle, marginBottom: 24 }}>
+              <div style={panelTitleStyle}>
                 Behavioral Events
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {behRateSpikes.map((e, i) => (
-                  <div key={`rate-${i}`} style={{ background: "#16213e", borderRadius: 6, padding: "8px 14px", fontSize: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div key={`rate-${i}`} style={{ background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: 4, padding: "8px 14px", fontSize: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span><span style={{ color: "#ff9800", fontWeight: 700 }}>RATE SPIKE</span> — {e.count} requests in window</span>
-                    <span style={{ color: "#6b7280" }}>{e.timestamp ?? "—"}</span>
+                    <span style={{ color: "#666" }}>{e.timestamp ?? "—"}</span>
                   </div>
                 ))}
                 {behUrlEnum.map((e, i) => (
-                  <div key={`url-${i}`} style={{ background: "#16213e", borderRadius: 6, padding: "8px 14px", fontSize: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div key={`url-${i}`} style={{ background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: 4, padding: "8px 14px", fontSize: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span><span style={{ color: "#2196f3", fontWeight: 700 }}>URL ENUM</span> — {e.unique_paths} unique paths probed</span>
-                    <span style={{ color: "#6b7280" }}>—</span>
+                    <span style={{ color: "#666" }}>—</span>
                   </div>
                 ))}
                 {behVisitors.map((e, i) => (
-                  <div key={`vis-${i}`} style={{ background: "#16213e", borderRadius: 6, padding: "8px 14px", fontSize: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div key={`vis-${i}`} style={{ background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: 4, padding: "8px 14px", fontSize: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span><span style={{ color: "#e91e63", fontWeight: 700 }}>VISITOR ANOMALY</span> — {e.requests} requests</span>
-                    <span style={{ color: "#6b7280" }}>{e.timestamp ?? "—"}</span>
+                    <span style={{ color: "#666" }}>{e.timestamp ?? "—"}</span>
                   </div>
                 ))}
               </div>
@@ -480,17 +495,17 @@ export default function ThreatActorPage() {
 
           {/* User Agents */}
           {(ipProfile?.user_agents?.length ?? 0) > 0 && (
-            <div style={{ background: "#1a1a2e", border: "1px solid #2d2d4e", borderRadius: 10, padding: "16px 20px", marginBottom: 24 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#8b8fa8", marginBottom: 12, textTransform: "uppercase", letterSpacing: 1 }}>
+            <div style={{ ...panelStyle, marginBottom: 24 }}>
+              <div style={panelTitleStyle}>
                 User Agent Strings
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {ipProfile!.user_agents.slice(0, 8).map((ua, i) => (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#0d1117", borderRadius: 6, padding: "6px 12px", fontSize: 11 }}>
-                    <span style={{ color: "#a0a8c0", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "85%" }} title={ua.user_agent}>
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: 4, padding: "6px 12px", fontSize: 11 }}>
+                    <span style={{ color: "#999", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "85%" }} title={ua.user_agent}>
                       {ua.user_agent || "(empty)"}
                     </span>
-                    <span style={{ color: "#7c3aed", fontWeight: 700, marginLeft: 8 }}>{ua.count}</span>
+                    <span style={{ color: "#c0c0c0", fontWeight: 700, marginLeft: 8 }}>{ua.count}</span>
                   </div>
                 ))}
               </div>

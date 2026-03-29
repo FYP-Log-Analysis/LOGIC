@@ -1,0 +1,70 @@
+{
+  "generated_at": "2026-03-29T13:41:36Z",
+  "start_ts": null,
+  "end_ts": null,
+  "thresholds": {
+    "rate_window_minutes": 1,
+    "rate_threshold": 60,
+    "enum_window_hours": 1,
+    "enum_threshold": 50,
+    "status_window_minutes": 5,
+    "status_error_ratio": 0.5,
+    "visitor_zscore": 2.0
+  },
+  "summary": {
+    "total_rate_spike_windows": 3,
+    "total_enumeration_alerts": 0,
+    "total_status_spike_windows": 1,
+    "total_visitor_anomaly_hours": 0
+  },
+  "request_rate_spikes": [
+    {
+      "client_ip": "192.168.199.2",
+      "window_start": "2021-06-20T12:36",
+      "request_count": 7536,
+      "threshold_used": 60,
+      "window_minutes": 1,
+      "is_anomaly": true
+    },
+    {
+      "client_ip": "192.168.199.2",
+      "window_start": "2021-06-20T12:37",
+      "request_count": 3842,
+      "threshold_used": 60,
+      "window_minutes": 1,
+      "is_anomaly": true
+    },
+    {
+      "client_ip": "192.168.199.2",
+      "window_start": "2021-06-20T12:38",
+      "request_count": 974,
+      "threshold_used": 60,
+      "window_minutes": 1,
+      "is_anomaly": true
+    }
+  ],
+  "url_enumeration": [],
+  "status_code_spikes": [
+    {
+      "window_start": "2021-06-20T12:35",
+      "total_requests": 12381,
+      "error_count": 12014,
+      "error_ratio": 0.9704,
+      "top_status_codes": {},
+      "threshold_used": 0.5,
+      "window_minutes": 5,
+      "is_anomaly": true
+    }
+  ],
+  "visitor_rates": [
+    {
+      "hour": "2021-06-20T12:00",
+      "unique_visitors": 2,
+      "total_requests": 12553,
+      "mean_visitors": null,
+      "std_visitors": null,
+      "z_score": null,
+      "flag": "insufficient_data"
+    }
+  ]
+}

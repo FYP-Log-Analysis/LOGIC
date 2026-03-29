@@ -19,9 +19,11 @@ DB_PATH      = PROJECT_ROOT / "data" / "logic.db"
 LIVE_UPLOAD_FILENAME = "live-stream.log"
 
 _ALLOWED_SEVERITY_FIELDS = {"severity", "severity_v2", "severity_legacy"}
-_ACTIVE_SEVERITY_FIELD = (os.getenv("LOGIC_SEVERITY_FIELD") or "severity").strip().lower()
+# Default to severity_v2 which uses intelligent risk-based severity mapping
+# Can be overridden via LOGIC_SEVERITY_FIELD env var for rollback/testing
+_ACTIVE_SEVERITY_FIELD = (os.getenv("LOGIC_SEVERITY_FIELD") or "severity_v2").strip().lower()
 if _ACTIVE_SEVERITY_FIELD not in _ALLOWED_SEVERITY_FIELDS:
-    _ACTIVE_SEVERITY_FIELD = "severity"
+    _ACTIVE_SEVERITY_FIELD = "severity_v2"
 
 
 @contextmanager
@@ -574,6 +576,8 @@ def get_geo_summary(limit: int = 10, project_id: str | None = None) -> dict:
     backfill_ip_geo()
 
     # Aggregate detection counts per IP from rule_matches.json files
+    # NOTE: _load_all_matches() applies _normalise_match_severity() which ensures
+    # match["severity"] reflects the active severity field (severity_v2 by default)
     matches = _load_all_matches(project_id)
     ip_counts:   dict[str, int]       = {}
     ip_severity: dict[str, dict]      = {}
@@ -582,7 +586,7 @@ def get_geo_summary(limit: int = 10, project_id: str | None = None) -> dict:
         if not ip:
             continue
         ip_counts[ip] = ip_counts.get(ip, 0) + 1
-        sev = (m.get("severity") or "unknown").lower()
+        sev = (m.get("severity") or "unknown").lower()  # Already normalized to active field
         if ip not in ip_severity:
             ip_severity[ip] = {"critical": 0, "high": 0, "medium": 0, "low": 0}
         ip_severity[ip][sev] = ip_severity[ip].get(sev, 0) + 1
@@ -655,11 +659,13 @@ def get_geo_summary(limit: int = 10, project_id: str | None = None) -> dict:
 
 
 def get_stats(project_id: str | None = None) -> dict:
+    # NOTE: _load_all_matches() applies _normalise_match_severity() which ensures
+    # match["severity"] reflects the active severity field (severity_v2 by default)
     matches = _load_all_matches(project_id)
     by_severity: dict[str, int] = {}
     ip_ctr:      dict[str, int] = {}
     for m in matches:
-        sev = (m.get("severity") or "unknown").lower()
+        sev = (m.get("severity") or "unknown").lower()  # Already normalized to active field
         by_severity[sev] = by_severity.get(sev, 0) + 1
         ip = m.get("client_ip")
         if ip:
@@ -1376,7 +1382,7 @@ def get_overview_stats(
     success_count = 0
 
     for m in matches:
-        sev = (m.get("severity") or "unknown").lower()
+        sev = (m.get("severity") or "unknown").lower()  # Already normalized to active field
         severity_breakdown[sev] = severity_breakdown.get(sev, 0) + 1
 
         rid = m.get("rule_id", "")
@@ -1466,7 +1472,7 @@ def get_detection_aggregations(
     hourly_tl: dict[str, dict[str, int]] = {}
 
     for m in matches:
-        sev = (m.get("severity") or "unknown").lower()
+        sev = (m.get("severity") or "unknown").lower()  # Already normalized to active field
         severity[sev] = severity.get(sev, 0) + 1
 
         rid = m.get("rule_id", "")

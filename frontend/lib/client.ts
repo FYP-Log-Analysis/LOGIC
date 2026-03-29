@@ -450,6 +450,55 @@ export async function getWindowsSigmaRuleDetail(rulePath: string) {
   );
 }
 
+export interface WindowsIOCs {
+  ips: string[];
+  domains: string[];
+  hashes: {
+    md5: string[];
+    sha1: string[];
+    sha256: string[];
+  };
+  file_paths: string[];
+  users: string[];
+  processes: string[];
+  total_iocs: number;
+}
+
+export async function getWindowsIOCs(opts?: Pick<ScopeOpts, "projectId" | "uploadId">) {
+  return apiGet<WindowsIOCs>(buildQuery("api/analysis/windows/iocs", opts));
+}
+
+export interface WindowsCorrelation {
+  chains: Array<{
+    chain_id: string;
+    events: any[];
+    start_time: string;
+    end_time: string;
+    computers: string[];
+    users: string[];
+    correlation_reasons: string[];
+    severity: string;
+    event_count: number;
+    duration_seconds: number;
+  }>;
+  patterns: Array<{
+    pattern_type: string;
+    pattern_name: string;
+    computer: string;
+    confidence: string;
+    event_count: number;
+    mitre_technique: string;
+    description: string;
+  }>;
+  total_chains: number;
+  time_window_minutes: number;
+}
+
+export async function getWindowsCorrelation(opts?: Pick<ScopeOpts, "projectId" | "uploadId"> & { timeWindowMinutes?: number }) {
+  const params = { ...opts, time_window_minutes: opts?.timeWindowMinutes };
+  return apiGet<WindowsCorrelation>(buildQuery("api/analysis/windows/correlation", params));
+}
+
 export interface WindowsBehavioralResult {
   project_id: string;
   upload_id: string;

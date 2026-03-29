@@ -3,16 +3,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { runWindowsBehavioralAnalysis, getWindowsBehavioralResults } from "@/lib/client";
 import { useAuthStore } from "@/lib/store";
-import {
-  SectionHeader,
-  MetricCard,
-  Btn,
-  Spinner,
-  AlertBanner,
-  Divider,
-} from "@/components/ui-primitives";
 import LineChart from "@/components/charts/line-chart";
 import HawkinsChat from "@/components/hawkins-chat";
+import {
+  WindowsSectionHeader,
+  WindowsMetricCard,
+  WindowsDataPanel,
+  WindowsStatGrid,
+  WindowsFilterControls,
+  FilterInput,
+  WindowsButton,
+  WindowsEventTable,
+  WindowsLoadingSkeleton,
+  WindowsEmptyState,
+  WindowsDivider,
+} from "@/components/windows-ui";
 
 interface WindowsBehavioralResult {
   project_id: string;
@@ -95,9 +100,11 @@ export default function WindowsBehavioralPage() {
 
   if (!activeProject?.id) {
     return (
-      <div style={{ textAlign: "center", padding: 60, color: "#555" }}>
-        Select a project from the sidebar to view this page.
-      </div>
+      <WindowsEmptyState
+        icon="🖥️"
+        title="No Project Selected"
+        message="Select a Windows project from the sidebar to view behavioral analysis"
+      />
     );
   }
 
@@ -112,7 +119,7 @@ export default function WindowsBehavioralPage() {
     );
   }
 
-  // Timeline data for chart
+  const anomalousWindows = (result?.windows || []).filter((w) => w.is_anomalous);
   const timelineWindows = (result?.windows || []).filter((w) => w.anomaly_score !== null);
   const timelineLabels = timelineWindows.map((w) => new Date(w.window_start).toLocaleTimeString());
   const timelineDatasets = [
@@ -130,139 +137,173 @@ export default function WindowsBehavioralPage() {
     },
   ];
 
+  const topAnomalousComputers = (() => {
+    const computerCounts = new Map<string, number>();
+    anomalousWindows.forEach((w) => {
+      const count = computerCounts.get(w.window_start) || 0;
+      computerCounts.set(w.window_start, count + w.unique_computers);
+    });
+    return Array.from(computerCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+  })();
+
+  const avgAnomalyScore = anomalousWindows.length > 0
+    ? (anomalousWindows.reduce((sum, w) => sum + (w.anomaly_score || 0), 0) / anomalousWindows.length * 100).toFixed(1)
+    : "0.0";
+
+  const tableData = anomalousWindows.slice(0, 20).map((w) => ({
+    time: new Date(w.window_start).toLocaleString(),
+    events: w.event_count.toLocaleString(),
+    computers: w.unique_computers,
+    users: w.unique_users,
+    ips: w.unique_source_ips,
+    score: w.anomaly_score ? `${(w.anomaly_score * 100).toFixed(1)}%` : "N/A",
+  }));
+
   return (
-    <div>
-      <SectionHeader
+    <main className="page-shell">
+      <WindowsSectionHeader
         title="Anomalous Windows"
-        subtitle="ML-based (Isolation Forest) anomaly detection for Windows events"
+        subtitle={`${activeProject?.name} — ML-based (Isolation Forest) anomaly detection for Windows events`}
+        actions={
+          <WindowsButton onClick={() => loadLatest(activeProject.id)} disabled={loading || running}>
+            {loading ? "LOADING..." : "REFRESH"}
+          </WindowsButton>
+        }
       />
 
-      {/* Run controls */}
-      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
-        <label style={{ color: "#777", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.8 }}>Window (min)</label>
-        <input
+      {/* Run Controls */}
+      <WindowsFilterControls>
+        <FilterInput
+          label="Window (min)"
           type="number"
           min={1}
           max={60}
           value={windowMinutes}
           onChange={(e) => setWindowMinutes(Math.max(1, Math.min(60, Number(e.target.value) || 5)))}
-          style={{ width: 80, background: "#111", border: "1px solid #2a2a2a", color: "#ccc", padding: "6px 8px", borderRadius: 3, fontSize: 12 }}
+          style={{ width: "100px" }}
         />
-        <label style={{ color: "#777", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.8 }}>From</label>
-        <input
+        <FilterInput
+          label="From"
           type="datetime-local"
           value={startTs}
           onChange={(e) => setStartTs(e.target.value)}
-          style={{ background: "#111", border: "1px solid #2a2a2a", color: "#ccc", padding: "6px 8px", borderRadius: 3, fontSize: 12 }}
         />
-        <label style={{ color: "#777", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.8 }}>To</label>
-        <input
+        <FilterInput
+          label="To"
           type="datetime-local"
           value={endTs}
           onChange={(e) => setEndTs(e.target.value)}
-          style={{ background: "#111", border: "1px solid #2a2a2a", color: "#ccc", padding: "6px 8px", borderRadius: 3, fontSize: 12 }}
         />
-        <Btn onClick={handleRun} disabled={running}>
-          {running ? <><Spinner size={12} />&nbsp;&nbsp;RUNNING</> : "RUN ML ANALYSIS"}
-        </Btn>
-        <Btn onClick={() => loadLatest(activeProject.id)} disabled={loading || running} style={{ marginLeft: "auto" }}>
-          REFRESH
-        </Btn>
-      </div>
+        <WindowsButton onClick={handleRun} disabled={running} style={{ marginLeft: "auto" }}>
+          {running ? "RUNNING..." : "RUN ML ANALYSIS"}
+        </WindowsButton>
+      </WindowsFilterControls>
 
-      {error && <AlertBanner type="error" message={error} />}
-
-      {loading && (
-        <div style={{ textAlign: "center", padding: 24 }}>
-          <Spinner size={18} />
+      {error && (
+        <div style={{ padding: "12px", background: "#3d1a1a", border: "1px solid #8b3d3d", borderRadius: "4px", color: "#ff6b6b", fontSize: "11px" }}>
+          ⚠️ {error}
         </div>
       )}
 
+      {loading && <WindowsLoadingSkeleton count={3} height={100} />}
+
       {/* Results */}
-      {result && (
+      {!loading && result && (
         <>
-          <Divider />
-          <div style={{ marginBottom: 18 }}>
-            <div style={{ fontSize: 11, color: "#555", letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>
-              Run Summary
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-              <MetricCard label="Total Windows" value={(result.total_windows ?? 0).toLocaleString()} />
-              <MetricCard label="Anomalous Windows" value={(result.anomalous_windows ?? 0).toLocaleString()} accent="#ff8800" />
-              <MetricCard label="Window Size" value={`${result.window_minutes} min`} />
-            </div>
-          </div>
+          {/* Summary Metrics */}
+          <WindowsStatGrid columns={4}>
+            <WindowsMetricCard
+              label="Total Windows"
+              value={(result.total_windows ?? 0).toLocaleString()}
+              accent="#7cb342"
+              icon="🪟"
+            />
+            <WindowsMetricCard
+              label="Anomalous Windows"
+              value={(result.anomalous_windows ?? 0).toLocaleString()}
+              accent="#ff8800"
+              icon="⚠️"
+              sublabel={`${result.total_windows > 0 ? ((result.anomalous_windows / result.total_windows) * 100).toFixed(1) : 0}% of total`}
+            />
+            <WindowsMetricCard
+              label="Window Size"
+              value={`${result.window_minutes} min`}
+              accent="#4488ff"
+              icon="⏱️"
+            />
+            <WindowsMetricCard
+              label="Avg Anomaly Score"
+              value={`${avgAnomalyScore}%`}
+              accent="#f0c040"
+              icon="📊"
+            />
+          </WindowsStatGrid>
+
+          <WindowsDivider />
 
           {/* Anomaly Timeline Chart */}
           {timelineLabels.length > 0 && (
-            <>
-              <Divider />
-              <div style={{ fontSize: 11, color: "#555", letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>
-                Anomaly Score Timeline
-              </div>
-              <div style={{ background: "#0a0a0a", borderRadius: 4, padding: 16, marginBottom: 20 }}>
+            <WindowsDataPanel title="Anomaly Score Timeline" accent="#ff8800">
+              <div style={{ background: "#0a0a0a", borderRadius: 4, padding: 16 }}>
                 <LineChart
                   labels={timelineLabels}
                   datasets={timelineDatasets}
                   yLabel="Value"
                 />
               </div>
-            </>
+            </WindowsDataPanel>
           )}
 
-          {/* Anomalies Summary */}
-          {(result?.windows || []).length > 0 && (
-            <>
-              <Divider />
-              <div style={{ fontSize: 11, color: "#555", letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>
-                Anomalies by Time Window
-              </div>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-                <thead>
-                  <tr style={{ borderBottom: "1px solid #1e1e1e", background: "#0a0a0a" }}>
-                    {["Time Window", "Events", "Computers", "Users", "Anomaly Score", "Status"].map((h) => (
-                      <th key={h} style={{ textAlign: "left", color: "#444", padding: "6px 10px", fontSize: 9, letterSpacing: 0.8, textTransform: "uppercase" }}>
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(result.windows || [])
-                    .filter((w) => w.is_anomalous)
-                    .slice(0, 15)
-                    .map((w, i) => (
-                      <tr key={i} style={{ borderBottom: "1px solid #111" }}>
-                        <td style={{ padding: "6px 10px", color: "#c0c0c0", fontSize: 10 }}>
-                          {new Date(w.window_start).toLocaleString()}
-                        </td>
-                        <td style={{ padding: "6px 10px", color: "#808080" }}>{w.event_count}</td>
-                        <td style={{ padding: "6px 10px", color: "#808080" }}>{w.unique_computers}</td>
-                        <td style={{ padding: "6px 10px", color: "#808080" }}>{w.unique_users}</td>
-                        <td style={{ padding: "6px 10px", color: "#ff8800", fontWeight: "bold" }}>
-                          {(w.anomaly_score ? (w.anomaly_score * 100).toFixed(1) : "N/A")}%
-                        </td>
-                        <td style={{ padding: "6px 10px" }}>
-                          <span style={{ background: "#ff8800", color: "#000", padding: "2px 6px", borderRadius: 2, fontSize: 8, fontWeight: "bold", textTransform: "uppercase" }}>
-                            Anomalous
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </>
+          {timelineLabels.length > 0 && <WindowsDivider />}
+
+          {/* Anomalous Windows Table */}
+          {anomalousWindows.length > 0 ? (
+            <WindowsDataPanel title="Anomalous Time Windows" accent="#ff8800">
+              <WindowsEventTable
+                columns={[
+                  { key: "time", label: "Time Window", width: "25%" },
+                  { key: "events", label: "Events", width: "12%" },
+                  { key: "computers", label: "Computers", width: "12%" },
+                  { key: "users", label: "Users", width: "12%" },
+                  { key: "ips", label: "IPs", width: "12%" },
+                  { key: "score", label: "Anomaly Score", width: "15%" },
+                ]}
+                data={tableData}
+                emptyMessage="No anomalous windows detected"
+              />
+            </WindowsDataPanel>
+          ) : (
+            <WindowsEmptyState
+              icon="✅"
+              title="No Anomalies Detected"
+              message="All time windows appear to have normal behavioral patterns"
+            />
           )}
 
-          {/* Status message */}
-          {result?.status && (
-            <div style={{ marginTop: 20, fontSize: 11, color: result.status === "ok" ? "#4caf50" : "#f0c040" }}>
-              Status: {result.status.toUpperCase()}
-              {result.status.includes("insufficient") && " — Not enough data for ML model"}
+          {/* Status Info */}
+          {result?.status && result.status !== "ok" && (
+            <div style={{ marginTop: 20, padding: "12px", background: "#2a2410", border: "1px solid #5a5020", borderRadius: "4px", fontSize: "11px", color: "#f0c040" }}>
+              ℹ️ Status: {result.status.toUpperCase().replace(/_/g, " ")}
+              {result.status.includes("insufficient") && " — Not enough data for ML model (need ≥5 windows)"}
               {result.status.includes("unavailable") && " — scikit-learn not available"}
             </div>
           )}
         </>
+      )}
+
+      {!loading && !result && !error && (
+        <WindowsEmptyState
+          icon="🤖"
+          title="No Analysis Results"
+          message="Behavioral analysis has not been run yet for this project"
+          action={
+            <WindowsButton onClick={handleRun}>
+              RUN ML ANALYSIS
+            </WindowsButton>
+          }
+        />
       )}
 
       <div style={{ marginTop: 40 }}>
@@ -274,6 +315,6 @@ export default function WindowsBehavioralPage() {
           helpGuide="Try: 'What time windows had the highest anomaly scores?' or 'Which computers are most anomalous?'"
         />
       </div>
-    </div>
+    </main>
   );
 }

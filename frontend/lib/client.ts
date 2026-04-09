@@ -319,6 +319,10 @@ export async function saveProjectAgentConfig(projectId: string, logPaths: string
   });
 }
 
+export async function getProjectNxlogConfig(projectId: string) {
+  return apiGet<string>(`api/projects/${projectId}/agent-config/nxlog`);
+}
+
 export interface LiveAgentMonitorEvent {
   timestamp: number;
   message: string;

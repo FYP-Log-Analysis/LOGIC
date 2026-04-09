@@ -8,12 +8,60 @@ import logging
 import uuid
 from pathlib import Path
 from datetime import datetime, timezone
+import yaml
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 PROJECTS_DIR = Path(__file__).resolve().parents[2] / "data" / "projects"
 SIGMA_RULES_DIR = Path(__file__).resolve().parents[2] / "data" / "sigma_rules"
+
+
+def _iter_sigma_rule_files(root: Path) -> list[Path]:
+    """Return all YAML Sigma rule files under the sigma root."""
+    if not root.exists() or not root.is_dir():
+        return []
+
+    files = [
+        p
+        for p in root.rglob("*")
+        if p.is_file() and p.suffix.lower() in {".yml", ".yaml"}
+    ]
+    files.sort(key=lambda p: str(p.relative_to(root)).replace("\\", "/").lower())
+    return files
+
+
+def _read_sigma_rule_metadata(rule_file: Path) -> dict[str, Any]:
+    """Extract lightweight Sigma metadata from YAML; fall back to filename when needed."""
+    try:
+        relative_path = str(rule_file.resolve().relative_to(SIGMA_RULES_DIR.resolve())).replace("\\", "/")
+    except Exception:
+        relative_path = rule_file.name
+
+    metadata: dict[str, Any] = {
+        "rule_path": relative_path,
+        "id": rule_file.stem,
+        "title": rule_file.stem,
+        "level": "medium",
+        "description": "",
+        "logsource": {},
+        "tags": [],
+    }
+
+    try:
+        parsed = yaml.safe_load(rule_file.read_text(encoding="utf-8"))
+        if isinstance(parsed, dict):
+            metadata["id"] = str(parsed.get("id", "")).strip() or rule_file.stem
+            metadata["title"] = str(parsed.get("title", "")).strip() or rule_file.stem
+            metadata["level"] = str(parsed.get("level", "medium")).lower()
+            metadata["description"] = str(parsed.get("description", "")).strip()
+            metadata["logsource"] = parsed.get("logsource") if isinstance(parsed.get("logsource"), dict) else {}
+            metadata["tags"] = parsed.get("tags") if isinstance(parsed.get("tags"), list) else []
+    except Exception:
+        # Keep fallback metadata so broken YAML can still be listed and opened.
+        pass
+
+    return metadata
 
 
 def _latest_upload_id(project_id: str) -> str | None:
@@ -232,32 +280,12 @@ async def get_windows_sigma_results(
 @router.get("/windows/sigma-rules")
 async def list_windows_sigma_rules(_user: UserInDB = Depends(get_current_user)) -> Dict:
     """List available Windows Sigma rules with metadata for browsing."""
-    from core.detection.windows_sigma import load_sigma_rules
-    
-    indexed_rules: list[dict[str, Any]] = []
-    for rule in load_sigma_rules(str(SIGMA_RULES_DIR)):
-        source_file = Path(str(rule.get("source_file", "")))
-        try:
-            relative_path = source_file.resolve().relative_to(SIGMA_RULES_DIR.resolve())
-        except Exception:
-            continue
-        
-        indexed_rules.append(
-            {
-                "rule_path": str(relative_path).replace("\\", "/"),
-                "id": str(rule.get("id", "")).strip() or source_file.stem,
-                "title": str(rule.get("title", "Unnamed Rule")),
-                "level": str(rule.get("level", "medium")).lower(),
-                "description": str(rule.get("description", "")).strip(),
-                "logsource": rule.get("logsource") if isinstance(rule.get("logsource"), dict) else {},
-                "tags": rule.get("tags", []),
-            }
-        )
-    
-    indexed_rules.sort(key=lambda item: (item.get("title", "").lower(), item.get("rule_path", "")))
+    indexed_rules = [_read_sigma_rule_metadata(rule_file) for rule_file in _iter_sigma_rule_files(SIGMA_RULES_DIR)]
+
+    indexed_rules.sort(key=lambda item: (item.get("rule_path", "").lower(), item.get("title", "").lower()))
     return {
         "rules": indexed_rules,
-        "count": len(rules),
+        "count": len(indexed_rules),
     }
 
 
@@ -267,8 +295,6 @@ async def view_windows_sigma_rule(
     _user: UserInDB = Depends(get_current_user),
 ) -> Dict:
     """Return one Sigma rule's YAML content and metadata."""
-    from core.detection.windows_sigma import load_sigma_rules
-    
     normalized = (rule_path or "").strip().lstrip("/")
     if not normalized:
         raise HTTPException(status_code=400, detail="rule_path is required.")
@@ -279,28 +305,20 @@ async def view_windows_sigma_rule(
         raise HTTPException(status_code=400, detail="Invalid rule_path.")
     if not target.exists() or not target.is_file():
         raise HTTPException(status_code=404, detail="Sigma rule file not found.")
-    
-    # Load rule metadata
-    all_rules = load_sigma_rules(str(SIGMA_RULES_DIR))
-    rule_metadata = next(
-        (r for r in all_rules if Path(r.get("source_file", "")).resolve() == target),
-        None
-    )
-    
-    if not rule_metadata:
-        raise HTTPException(status_code=404, detail="Sigma rule metadata not found.")
-    
+
     try:
         yaml_content = target.read_text(encoding="utf-8")
     except Exception as exc:
         logger.exception("Failed reading sigma rule file %s: %s", target, exc)
         raise HTTPException(status_code=500, detail="Failed to read sigma rule file.") from exc
+
+    rule_metadata = _read_sigma_rule_metadata(target)
     
     return {
         "rule": {
             "rule_path": normalized.replace("\\", "/"),
             "id": str(rule_metadata.get("id", "")).strip() or target.stem,
-            "title": str(rule_metadata.get("title", "Unnamed Rule")),
+            "title": str(rule_metadata.get("title", target.stem)),
             "level": str(rule_metadata.get("level", "medium")).lower(),
             "description": str(rule_metadata.get("description", "")).strip(),
             "logsource": rule_metadata.get("logsource", {}),

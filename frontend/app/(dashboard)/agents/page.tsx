@@ -5,6 +5,8 @@ import { useAuthStore } from "@/lib/store";
 import {
   getProjects,
   getProjectApiKey,
+  getProjectAgentConfig,
+  getProjectNxlogConfig,
   getLiveAgentMonitor,
   type LiveAgentMonitorData,
   getRawLogs,
@@ -41,8 +43,8 @@ export default function AgentsPage() {
   const [logPaths, setLogPaths] = useState<string[]>([
     "C:/inetpub/logs/LogFiles/**/*.log",
   ]);
-  const [newPath, setNewPath] = useState("");
-  const [copied, setCopied] = useState<"command" | "key" | null>(null);
+  const [nxlogConf, setNxlogConf] = useState("");
+  const [copied, setCopied] = useState<"key" | "nxlog" | null>(null);
   const [monitor, setMonitor] = useState<LiveAgentMonitorData | null>(null);
   const [rawLogs, setRawLogs] = useState<RawLogEntry[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
@@ -78,17 +80,24 @@ export default function AgentsPage() {
     setError("");
     setLogsLoading(true);
     try {
+      const platform = projectType === "windows" ? "windows" : undefined;
       const logsPromise = projectType === "windows"
         ? Promise.resolve([] as RawLogEntry[])
         : getRawLogs({ projectId, limit: 500, liveOnly: true, excludeWindows: true });
 
-      const [mon, keyData, logs] = await Promise.all([
+      const nxlogPromise = getProjectNxlogConfig(projectId);
+
+      const [mon, keyData, logs, cfg, generatedNxlogConf] = await Promise.all([
         getLiveAgentMonitor(projectId),
         getProjectApiKey(projectId),
         logsPromise,
+        getProjectAgentConfig(projectId, platform),
+        nxlogPromise,
       ]);
       setMonitor(mon);
       setApiKeys((prev) => ({ ...prev, [projectId]: keyData.api_key ?? null }));
+      setLogPaths(cfg.effective_log_paths?.length ? cfg.effective_log_paths : ["C:/inetpub/logs/LogFiles/**/*.log"]);
+      setNxlogConf(generatedNxlogConf);
       setRawLogs(
         logs.filter((entry) => {
           const serverType = String(entry.server_type ?? "").toLowerCase();
@@ -98,6 +107,7 @@ export default function AgentsPage() {
     } catch (e) {
       setError(String(e));
       setRawLogs([]);
+      setNxlogConf("");
     } finally {
       setLogsLoading(false);
     }
@@ -149,26 +159,16 @@ export default function AgentsPage() {
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
 
-  const origin = typeof window !== "undefined" ? window.location.origin : "http://your-logic-server";
-  const commandText = useMemo(() => {
-    const joinedPaths = logPaths
-      .filter((p) => p.trim())
-      .map((p) => ` --log-path \"${p.trim()}\"`)
-      .join("");
-
-    return `$script=\"$env:TEMP\\log_sender.py\"; iwr \"${origin}/api/logicx/script\" -OutFile $script; python $script --api-url \"${origin}\" --api-key \"${selectedApiKey ?? "<generate-api-key-from-projects-page>"}\" --project-id \"${selectedProjectId || "<project-id>"}\"${joinedPaths || " --log-path \"C:/inetpub/logs/LogFiles/**/*.log\""} --max-retries 5`;
-  }, [logPaths, origin, selectedApiKey, selectedProjectId]);
-
-  const copyCommand = () => {
-    navigator.clipboard.writeText(commandText).then(() => {
-      setCopied("command");
+  const copyKey = () => {
+    navigator.clipboard.writeText(selectedApiKey ?? "").then(() => {
+      setCopied("key");
       setTimeout(() => setCopied(null), 2000);
     });
   };
 
-  const copyKey = () => {
-    navigator.clipboard.writeText(selectedApiKey ?? "").then(() => {
-      setCopied("key");
+  const copyNxlog = () => {
+    navigator.clipboard.writeText(nxlogConf).then(() => {
+      setCopied("nxlog");
       setTimeout(() => setCopied(null), 2000);
     });
   };
@@ -185,28 +185,11 @@ export default function AgentsPage() {
     );
   }
 
-  const handleAddPath = () => {
-    const value = newPath.trim();
-    if (!value) return;
-    if (logPaths.includes(value)) {
-      setError("Path already exists in the list.");
-      return;
-    }
-    setLogPaths((prev) => [...prev, value]);
-    setNewPath("");
-    setError("");
-  };
-
-  const handleRemovePath = (value: string) => {
-    setLogPaths((prev) => prev.filter((p) => p !== value));
-    setError("");
-  };
-
   return (
     <div>
       <SectionHeader
         title="Agents"
-        subtitle="Python agent operations dashboard with runtime monitoring and incoming logs"
+        subtitle="NXLog agent operations dashboard with runtime monitoring and incoming logs"
       />
 
       {error && <AlertBanner type="error" message={error} />}
@@ -241,36 +224,19 @@ export default function AgentsPage() {
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10, marginBottom: 14 }}>
             <MetricCard label="API Key" value={selectedApiKey ? "AVAILABLE" : "MISSING"} accent={selectedApiKey ? "#70d08c" : "#d56a6a"} />
-            <MetricCard label="Command Paths" value={logPaths.length} />
+            <MetricCard label="Configured Paths" value={logPaths.length} />
             <MetricCard label="Agent Status" value={(monitor?.status ?? "idle").toUpperCase()} accent={monitor?.status === "active" ? "#70d08c" : "#c5b27b"} />
             <MetricCard label="Uptime" value={formatUptime(monitor?.uptime_seconds ?? 0)} sub={monitor?.last_batch_at ? `Last batch ${new Date(monitor.last_batch_at * 1000).toLocaleString()}` : "No batches yet"} />
           </div>
 
           <div style={{ background: "#0d0d0d", border: "1px solid #1e1e1e", borderRadius: 4, padding: 14 }}>
             <div style={{ fontSize: 11, color: "#666", letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>
-              Python Agent Command Builder
-            </div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-              <input
-                value={newPath}
-                onChange={(e) => setNewPath(e.target.value)}
-                placeholder="Add a --log-path value, e.g. C:/inetpub/logs/LogFiles/**/*.log"
-                style={{
-                  flex: 1,
-                  background: "#111",
-                  border: "1px solid #2a2a2a",
-                  color: "#c0c0c0",
-                  padding: "8px 10px",
-                  borderRadius: 3,
-                  fontSize: 12,
-                }}
-              />
-              <Btn variant="ghost" onClick={handleAddPath}>ADD PATH</Btn>
+              NXLog Agent Configuration
             </div>
 
             {logPaths.length === 0 ? (
               <div style={{ color: "#555", fontSize: 12, marginBottom: 10 }}>
-                No log paths configured in command builder.
+                No log paths configured for this project.
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
@@ -288,16 +254,10 @@ export default function AgentsPage() {
                     }}
                   >
                     <div style={{ flex: 1, color: "#a7d97a", fontFamily: "monospace", fontSize: 11, wordBreak: "break-all" }}>{p}</div>
-                    <Btn variant="danger" onClick={() => handleRemovePath(p)} style={{ fontSize: 10 }}>REMOVE</Btn>
                   </div>
                 ))}
               </div>
             )}
-
-            <div style={{ fontSize: 10, color: "#6e8796", marginBottom: 4 }}>Start command</div>
-            <div style={{ fontFamily: "monospace", fontSize: 11, color: "#a7d97a", marginBottom: 10, whiteSpace: "pre-wrap", wordBreak: "break-all", background: "#090909", border: "1px solid #1a1a1a", borderRadius: 3, padding: "8px 10px" }}>
-              {commandText}
-            </div>
 
             <div style={{ fontSize: 10, color: "#6e8796", marginBottom: 4 }}>Copy-ready API key command</div>
             <div style={{ fontFamily: "monospace", fontSize: 11, color: "#9fd4ff", marginBottom: 10, whiteSpace: "pre-wrap", wordBreak: "break-all", background: "#090909", border: "1px solid #1a1a1a", borderRadius: 3, padding: "8px 10px" }}>
@@ -305,9 +265,6 @@ export default function AgentsPage() {
             </div>
 
             <div style={{ display: "flex", gap: 8 }}>
-              <Btn variant="default" onClick={copyCommand} disabled={!selectedProjectId}>
-                {copied === "command" ? "COPIED!" : "COPY START COMMAND"}
-              </Btn>
               <Btn variant="ghost" onClick={copyKey} disabled={!selectedProjectId || !selectedApiKey}>
                 {copied === "key" ? "COPIED!" : "COPY API KEY"}
               </Btn>
@@ -317,6 +274,37 @@ export default function AgentsPage() {
                 disabled={!selectedProjectId}
               >
                 REFRESH
+              </Btn>
+            </div>
+
+            <Divider />
+            <div style={{ fontSize: 11, color: "#666", letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>
+              Generated NXLog Configuration
+            </div>
+            <div style={{ fontSize: 11, color: "#777", marginBottom: 8 }}>
+              Copy this full file into nxlog.conf and restart the NXLog service.
+            </div>
+            <pre
+              style={{
+                margin: 0,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                fontFamily: "monospace",
+                fontSize: 11,
+                color: "#a7d97a",
+                background: "#090909",
+                border: "1px solid #1a1a1a",
+                borderRadius: 3,
+                padding: "10px",
+                maxHeight: 340,
+                overflowY: "auto",
+              }}
+            >
+              {nxlogConf || "NXLog config is not available yet. Click REFRESH to regenerate."}
+            </pre>
+            <div style={{ display: "flex", marginTop: 10 }}>
+              <Btn variant="default" onClick={copyNxlog} disabled={!nxlogConf}>
+                {copied === "nxlog" ? "COPIED!" : "COPY NXLOG CONF"}
               </Btn>
             </div>
           </div>

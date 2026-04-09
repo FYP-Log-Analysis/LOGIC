@@ -167,7 +167,6 @@ export default function WindowsAnalysisPage() {
   if (!activeProject?.id) {
     return (
       <WindowsEmptyState
-        icon="🖥️"
         title="No Project Selected"
         message="Select a Windows project from the sidebar to view rule-based detection"
       />
@@ -196,13 +195,13 @@ export default function WindowsAnalysisPage() {
         actions={
           <div style={{ display: "flex", gap: "10px" }}>
             <WindowsButton onClick={handleExportCSV} variant="secondary" disabled={!sigmaResults}>
-              📊 EXPORT CSV
+              EXPORT CSV
             </WindowsButton>
             <WindowsButton onClick={handleExportReport} variant="secondary" disabled={!sigmaResults}>
-              📄 EXPORT REPORT
+              EXPORT REPORT
             </WindowsButton>
             <WindowsButton onClick={fetchResults} disabled={loading}>
-              {loading ? "LOADING..." : "🔄 REFRESH"}
+              {loading ? "LOADING..." : "REFRESH"}
             </WindowsButton>
           </div>
         }
@@ -210,7 +209,7 @@ export default function WindowsAnalysisPage() {
 
       {error && (
         <div style={{ padding: "12px", background: "#3d1a1a", border: "1px solid #8b3d3d", borderRadius: "4px", color: "#ff6b6b", fontSize: "11px", marginBottom: "20px" }}>
-          ⚠️ {error}
+          {error}
         </div>
       )}
 
@@ -224,25 +223,21 @@ export default function WindowsAnalysisPage() {
               label="Total Matches"
               value={sigmaResults.matches?.length || 0}
               accent="#7cb342"
-              icon="🎯"
             />
             <WindowsMetricCard
               label="Critical + High"
               value={severityCounts.critical + severityCounts.high}
               accent="#ff4444"
-              icon="🚨"
             />
             <WindowsMetricCard
               label="Unique Computers"
               value={uniqueComputers}
               accent="#4488ff"
-              icon="🖥️"
             />
             <WindowsMetricCard
               label="Matched Rules"
               value={sigmaResults.matched_rules?.length || 0}
               accent="#aa66cc"
-              icon="📋"
             />
           </WindowsStatGrid>
 
@@ -348,7 +343,7 @@ export default function WindowsAnalysisPage() {
                 }}
                 style={{ fontSize: "10px", padding: "6px 12px" }}
               >
-                ✕ CLEAR
+                CLEAR
               </WindowsButton>
             )}
             <div style={{ marginLeft: "auto", fontSize: "11px", color: "#666" }}>
@@ -366,7 +361,6 @@ export default function WindowsAnalysisPage() {
               />
             ) : (
               <WindowsEmptyState
-                icon="✅"
                 title="No threats detected"
                 message={severityFilter !== "all" ? "No matches for selected severity filter" : "No Sigma rule matches found"}
               />
@@ -383,13 +377,11 @@ export default function WindowsAnalysisPage() {
                     label="Total IOCs"
                     value={iocs.total_iocs}
                     accent="#ff8800"
-                    icon="🎯"
                   />
                   <WindowsMetricCard
                     label="IP Addresses"
                     value={iocs.ips.length}
                     accent="#4488ff"
-                    icon="🌐"
                   />
                   <WindowsMetricCard
                     label="File Hashes"
@@ -399,7 +391,6 @@ export default function WindowsAnalysisPage() {
                       (iocs.hashes.sha256?.length || 0)
                     }
                     accent="#ff8800"
-                    icon="#️⃣"
                   />
                 </WindowsStatGrid>
 
@@ -488,7 +479,6 @@ export default function WindowsAnalysisPage() {
 
       {!loading && !sigmaResults && !error && (
         <WindowsEmptyState
-          icon="🔍"
           title="No Analysis Results"
           message="Sigma detection has not been run yet for this project"
           action={

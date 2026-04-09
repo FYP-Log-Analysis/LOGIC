@@ -84,10 +84,9 @@ export default function OverviewPage() {
   const sigmaRulesByFolder = useMemo(() => {
     const grouped = new Map<string, WindowsSigmaRuleSummary[]>();
     for (const rule of sigmaRuleCatalog) {
-      const rawPath = rule.rule_path || "";
-      const normalized = rawPath.replace(/^windows\//, "");
-      const lastSlash = normalized.lastIndexOf("/");
-      const folder = lastSlash > -1 ? normalized.slice(0, lastSlash) : "(root)";
+      const rawPath = (rule.rule_path || "").replace(/\\/g, "/").replace(/^\/+/, "");
+      const lastSlash = rawPath.lastIndexOf("/");
+      const folder = lastSlash > -1 ? rawPath.slice(0, lastSlash) : "(root)";
       const bucket = grouped.get(folder) ?? [];
       bucket.push(rule);
       grouped.set(folder, bucket);
@@ -96,7 +95,7 @@ export default function OverviewPage() {
     return Array.from(grouped.entries())
       .map(([folder, rules]) => ({
         folder,
-        rules: [...rules].sort((a, b) => (a.title || "").localeCompare(b.title || "")),
+        rules: [...rules].sort((a, b) => (a.rule_path || "").localeCompare(b.rule_path || "")),
       }))
       .sort((a, b) => a.folder.localeCompare(b.folder));
   }, [sigmaRuleCatalog]);
@@ -221,8 +220,8 @@ export default function OverviewPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "320px", overflowY: "auto" }}>
                 {sigmaRulesByFolder.map((group) => (
                   <div key={group.folder} style={{ border: "1px solid #1f1f1f", borderRadius: "4px", background: "#090909", padding: "8px" }}>
-                    <div style={{ color: "#7cb342", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: "8px" }}>
-                      windows/{group.folder} · {group.rules.length} rule{group.rules.length === 1 ? "" : "s"}
+                    <div style={{ color: "#7cb342", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: "8px", fontFamily: "monospace" }}>
+                      data/sigma_rules/{group.folder === "(root)" ? "" : group.folder} · {group.rules.length} file{group.rules.length === 1 ? "" : "s"}
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                       {group.rules.map((rule) => (
@@ -239,11 +238,14 @@ export default function OverviewPage() {
                           }}
                         >
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ color: "#d0d0d0", fontSize: "12px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                              {rule.title}
+                            <div style={{ color: "#d0d0d0", fontSize: "12px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontFamily: "monospace" }}>
+                              {rule.rule_path.split("/").pop() || rule.rule_path}
                             </div>
-                            <div style={{ color: "#707070", fontSize: "11px", marginTop: "3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                              {rule.id} · {rule.level}
+                            <div style={{ color: "#707070", fontSize: "11px", marginTop: "3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontFamily: "monospace" }}>
+                              {rule.rule_path}
+                            </div>
+                            <div style={{ color: "#707070", fontSize: "11px", marginTop: "2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {rule.id} · {rule.level} · {rule.title}
                             </div>
                           </div>
                           <button

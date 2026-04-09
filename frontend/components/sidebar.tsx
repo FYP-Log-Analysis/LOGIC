@@ -35,12 +35,6 @@ const NAV_WINDOWS = [
     label: "Anomalous Windows",
     analystOnly: true,
   },
-  {
-    key: "windows-correlation",
-    href: "/windows-correlation",
-    label: "Attack Chains",
-    analystOnly: true,
-  },
 ];
 
 const NAV_COMMON = [

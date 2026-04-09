@@ -16,7 +16,8 @@ import shutil
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
 from core.storage.sqlite_store import (
@@ -89,6 +90,152 @@ def _default_paths_for_platform(platform: str | None) -> list[str]:
     if p in {"windows", "win", "win32"}:
         return WINDOWS_DEFAULT_PATHS
     return UNIX_DEFAULT_PATHS
+
+
+def _resolve_public_api_base(request: Request) -> str:
+    forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",", 1)[0].strip()
+    forwarded_host = (request.headers.get("x-forwarded-host") or "").split(",", 1)[0].strip()
+
+    if forwarded_proto and forwarded_host:
+        return f"{forwarded_proto}://{forwarded_host}".rstrip("/")
+
+    return str(request.base_url).rstrip("/")
+
+
+def _render_nxlog_conf(
+    api_base_url: str,
+    project_id: str,
+    api_key: str,
+    file_log_paths: list[str],
+    include_windows_eventlog: bool,
+) -> str:
+    ingest_url = f"{api_base_url.rstrip('/')}/api/logicx/ingest?project_id={project_id}"
+    header_api_key = api_key.strip() if api_key.strip() else "<generate-api-key-from-projects-page>"
+
+    file_inputs: list[str] = []
+    file_input_names: list[str] = []
+    for idx, path in enumerate(file_log_paths, start=1):
+        input_name = f"in_file_{idx}"
+        file_input_names.append(input_name)
+        normalized_path = path.replace("\r", "").replace("\n", "").strip()
+        file_inputs.append(
+            "\n".join(
+                [
+                    f"<Input {input_name}>",
+                    "    Module      im_file",
+                    f"    File        \"{normalized_path}\"",
+                    "    SavePos     TRUE",
+                    "    ReadFromLast TRUE",
+                    "    Exec        $host = hostname();",
+                    f"    Exec        $file = \"{normalized_path}\";",
+                    "    Exec        $log = $raw_event;",
+                    "    Exec        $date = strftime(now(), \"%Y-%m-%dT%H:%M:%SZ\");",
+                    "    Exec        $agent_version = \"nxlog-1.0\";",
+                    "    Exec        to_json();",
+                    f"</Input>",
+                ]
+            )
+        )
+
+    route_sources = [*(["in_windows_events"] if include_windows_eventlog else []), *file_input_names]
+    route_path = f"{route_sources[0]} => out_logicx" if len(route_sources) == 1 else f"{', '.join(route_sources)} => out_logicx"
+
+    parts: list[str] = [
+        "Panic Soft",
+        "#NoFreeOnExit TRUE",
+        "",
+        "define ROOT     C:\\Program Files\\nxlog",
+        "define CERTDIR  %ROOT%\\cert",
+        "define CONFDIR  %ROOT%\\conf\\nxlog.d",
+        "define LOGDIR   %ROOT%\\data",
+        "",
+        "include %CONFDIR%\\\\*.conf",
+        "define LOGFILE  %LOGDIR%\\nxlog.log",
+        "LogFile %LOGFILE%",
+        "",
+        "Moduledir %ROOT%\\modules",
+        "CacheDir  %ROOT%\\data",
+        "Pidfile   %ROOT%\\data\\nxlog.pid",
+        "SpoolDir  %ROOT%\\data",
+        "",
+        "<Extension _syslog>",
+        "    Module      xm_syslog",
+        "</Extension>",
+        "",
+        "<Extension _charconv>",
+        "    Module      xm_charconv",
+        "    AutodetectCharsets iso8859-2, utf-8, utf-16, utf-32",
+        "</Extension>",
+        "",
+        "<Extension _exec>",
+        "    Module      xm_exec",
+        "</Extension>",
+        "",
+        "<Extension _fileop>",
+        "    Module      xm_fileop",
+        "",
+        "    # Check the size of our log file hourly, rotate if larger than 5MB",
+        "    <Schedule>",
+        "        Every   1 hour",
+        "        Exec    if (file_exists('%LOGFILE%') and \\",
+        "                   (file_size('%LOGFILE%') >= 5M)) \\",
+        "                    file_cycle('%LOGFILE%', 8);",
+        "    </Schedule>",
+        "",
+        "    # Rotate our log file every week on Sunday at midnight",
+        "    <Schedule>",
+        "        When    @weekly",
+        "        Exec    if file_exists('%LOGFILE%') file_cycle('%LOGFILE%', 8);",
+        "    </Schedule>",
+        "</Extension>",
+        "",
+        "# LOGIC additions for NXLog forwarding",
+        "<Extension _json>",
+        "    Module      xm_json",
+        "</Extension>",
+        "",
+        *(
+            [
+                "<Input in_windows_events>",
+                "    Module      im_msvistalog",
+                "    <QueryXML>",
+                "        <QueryList>",
+                "            <Query Id='0'>",
+                "                <Select Path='Security'>*</Select>",
+                "                <Select Path='System'>*</Select>",
+                "                <Select Path='Application'>*</Select>",
+                "            </Query>",
+                "        </QueryList>",
+                "    </QueryXML>",
+                "    Exec        to_json();",
+                "    Exec        $log = $raw_event;",
+                "    Exec        $host = hostname();",
+                "    Exec        $file = \"windows_eventlog\";",
+                "    Exec        $date = strftime(now(), \"%Y-%m-%dT%H:%M:%SZ\");",
+                "    Exec        $agent_version = \"nxlog-1.0\";",
+                "    Exec        to_json();",
+                "</Input>",
+                "",
+            ]
+            if include_windows_eventlog
+            else []
+        ),
+        *file_inputs,
+        *( [""] if file_inputs else [] ),
+        "<Output out_logicx>",
+        "    Module      om_http",
+        f"    URL         {ingest_url}",
+        "    HTTPSAllowUntrusted TRUE",
+        "    ContentType application/x-ndjson",
+        f"    AddHeader   X-Logic-Api-Key {header_api_key}",
+        "</Output>",
+        "",
+        "<Route r_logicx>",
+        f"    Path        {route_path}",
+        "</Route>",
+        "",
+    ]
+    return "\n".join(parts)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -397,3 +544,29 @@ async def get_agent_runtime_config(
         "batch_size": 200,
         "ingest_path": "/api/logicx/ingest",
     }
+
+
+@router.get("/projects/{project_id}/agent-config/nxlog", response_class=PlainTextResponse)
+async def get_project_nxlog_conf(
+    request: Request,
+    project_id: str,
+    current_user: UserInDB = Depends(require_analyst),
+) -> PlainTextResponse:
+    """Return a copy/paste-ready NXLog config for web/windows log shipping to LOGIC."""
+    project = _assert_exists(project_id)
+    _assert_access(project, current_user)
+
+    api_key = str(project.get("api_key") or "").strip()
+    configured = get_project_agent_log_paths(project_id)
+    project_type = str(project.get("project_type") or "web").lower()
+    default_platform = "windows" if project_type == "windows" else None
+    effective_paths = configured if configured else _default_paths_for_platform(default_platform)
+
+    conf_text = _render_nxlog_conf(
+        api_base_url=_resolve_public_api_base(request),
+        project_id=project_id,
+        api_key=api_key,
+        file_log_paths=effective_paths,
+        include_windows_eventlog=project_type == "windows",
+    )
+    return PlainTextResponse(conf_text)

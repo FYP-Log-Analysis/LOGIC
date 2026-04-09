@@ -10,6 +10,7 @@ import {
   getProjectUploads,
   generateProjectApiKey,
   getProjectApiKey,
+  getProjectNxlogConfig,
   getLiveAgentMonitor,
   type LiveAgentMonitorData,
   type ProjectType,
@@ -94,8 +95,8 @@ export default function ProjectsPage() {
   const [generatingKey, setGeneratingKey] = useState<Record<string, boolean>>({});
   const [copiedKey, setCopiedKey] = useState<Record<string, boolean>>({});
   const [copiedCommand, setCopiedCommand] = useState<Record<string, boolean>>({});
+  const [nxlogConfByProject, setNxlogConfByProject] = useState<Record<string, string>>({});
   const [agentSetupProjectId, setAgentSetupProjectId] = useState<string | null>(null);
-  const [showAgentUsage, setShowAgentUsage] = useState(false);
   const [liveMonitor, setLiveMonitor] = useState<LiveAgentMonitorData | null>(null);
   const [liveMonitorLoading, setLiveMonitorLoading] = useState(false);
   const [liveMonitorError, setLiveMonitorError] = useState("");
@@ -211,15 +212,19 @@ export default function ProjectsPage() {
   };
 
   const openAgentSetup = async (projectId: string) => {
-    setShowAgentUsage(false);
     setAgentSetupProjectId(projectId);
-    if (!(projectId in apiKeys)) {
-      try {
-        const data = await getProjectApiKey(projectId);
-        setApiKeys((prev) => ({ ...prev, [projectId]: data.api_key ?? null }));
-      } catch {
+    try {
+      const [keyData, nxlogConf] = await Promise.all([
+        getProjectApiKey(projectId),
+        getProjectNxlogConfig(projectId),
+      ]);
+      setApiKeys((prev) => ({ ...prev, [projectId]: keyData.api_key ?? null }));
+      setNxlogConfByProject((prev) => ({ ...prev, [projectId]: nxlogConf }));
+    } catch {
+      if (!(projectId in apiKeys)) {
         setApiKeys((prev) => ({ ...prev, [projectId]: null }));
       }
+      setNxlogConfByProject((prev) => ({ ...prev, [projectId]: "" }));
     }
   };
 
@@ -291,7 +296,6 @@ export default function ProjectsPage() {
   };
 
   const closeAgentSetup = () => {
-    setShowAgentUsage(false);
     setAgentSetupProjectId(null);
   };
 
@@ -578,7 +582,7 @@ export default function ProjectsPage() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <div>
-                <div style={{ fontSize: 12, color: "#6e8796", letterSpacing: 1, textTransform: "uppercase" }}>Web Server Agent</div>
+                <div style={{ fontSize: 12, color: "#6e8796", letterSpacing: 1, textTransform: "uppercase" }}>NXLog Agent</div>
                 <div style={{ color: "#d7e2e9", fontSize: 15, fontWeight: 600 }}>Project Agent Setup + Live Monitor</div>
               </div>
               <Btn variant="ghost" onClick={closeAgentSetup}>Close</Btn>
@@ -588,20 +592,15 @@ export default function ProjectsPage() {
               <div style={{ background: "#0a0d10", border: "1px solid #1a222a", borderRadius: 6, padding: 12 }}>
                 <div style={{ fontSize: 11, color: "#7fa8bf", marginBottom: 8, letterSpacing: 1, textTransform: "uppercase" }}>Installation Guide</div>
                 <div style={{ color: "#8fa6b3", fontSize: 12, marginBottom: 8 }}>
-                  Use the Python agent command below on your web server. The command downloads the latest agent script and starts shipping logs immediately.
+                  Use the generated NXLog configuration below. Copy it into nxlog.conf, then restart the NXLog service.
                 </div>
                 <div style={{ color: "#6e8796", fontSize: 11, marginBottom: 10 }}>
-                  Configure the log paths directly in the command with one or more <span style={{ fontFamily: "monospace" }}>--log-path</span> flags.
+                  The configuration includes your project ID and API key header for direct ingestion to LOGIC.
                 </div>
-                <div style={{ fontSize: 11, color: "#6e8796", marginBottom: 4 }}>Windows Server</div>
-                <div style={{ fontFamily: "monospace", fontSize: 11, color: "#a7d97a", background: "#06090c", border: "1px solid #1a222a", padding: 8, borderRadius: 4, marginBottom: 10, wordBreak: "break-all" }}>
-                  {(() => {
-                    const project = projects.find((x) => x.id === agentSetupProjectId);
-                    const key = apiKeys[agentSetupProjectId] || "<generate-project-key-first>";
-                    const origin = typeof window !== "undefined" ? window.location.origin : "http://your-logic-server";
-                    return `$script="$env:TEMP\\log_sender.py"; iwr "${origin}/api/logicx/script" -OutFile $script; python $script --api-url "${origin}" --api-key "${key}" --project-id "${project?.id ?? "<project-id>"}" --log-path "C:/inetpub/logs/LogFiles/**/*.log" --max-retries 5`;
-                  })()}
-                </div>
+                <div style={{ fontSize: 11, color: "#6e8796", marginBottom: 4 }}>NXLog Configuration</div>
+                <pre style={{ fontFamily: "monospace", fontSize: 11, color: "#a7d97a", background: "#06090c", border: "1px solid #1a222a", padding: 8, borderRadius: 4, marginBottom: 10, whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 320, overflowY: "auto" }}>
+                  {nxlogConfByProject[agentSetupProjectId] || "NXLog config unavailable. Click AGENT SETUP again to regenerate."}
+                </pre>
 
                 <div style={{ fontSize: 11, color: "#6e8796", marginBottom: 4 }}>Copy-ready API key command</div>
                 <div style={{ fontFamily: "monospace", fontSize: 11, color: "#9fd4ff", background: "#06090c", border: "1px solid #1a222a", padding: 8, borderRadius: 4, marginBottom: 10, wordBreak: "break-all" }}>
@@ -615,15 +614,13 @@ export default function ProjectsPage() {
                   <Btn
                     variant="ghost"
                     onClick={() => {
-                      const project = projects.find((x) => x.id === agentSetupProjectId);
-                      const key = apiKeys[agentSetupProjectId] || "<generate-project-key-first>";
-                      const origin = typeof window !== "undefined" ? window.location.origin : "http://your-logic-server";
-                      const command = `$script=\"$env:TEMP\\log_sender.py\"; iwr \"${origin}/api/logicx/script\" -OutFile $script; python $script --api-url \"${origin}\" --api-key \"${key}\" --project-id \"${project?.id ?? "<project-id>"}\" --log-path \"C:/inetpub/logs/LogFiles/**/*.log\" --max-retries 5`;
-                      handleCopyCommand(agentSetupProjectId, command);
+                      const conf = nxlogConfByProject[agentSetupProjectId] || "";
+                      handleCopyCommand(agentSetupProjectId, conf);
                     }}
+                    disabled={!nxlogConfByProject[agentSetupProjectId]}
                     style={{ fontSize: 11 }}
                   >
-                    {copiedCommand[agentSetupProjectId] ? "COPIED!" : "COPY START COMMAND"}
+                    {copiedCommand[agentSetupProjectId] ? "COPIED!" : "COPY NXLOG CONF"}
                   </Btn>
                   <Btn
                     variant="ghost"
@@ -647,13 +644,6 @@ export default function ProjectsPage() {
                   )}
                   <Btn
                     variant="ghost"
-                    onClick={() => setShowAgentUsage((prev) => !prev)}
-                    style={{ fontSize: 11, textTransform: "lowercase" }}
-                  >
-                    agent usage
-                  </Btn>
-                  <Btn
-                    variant="ghost"
                     onClick={() => {
                       closeAgentSetup();
                       window.location.href = "/agents";
@@ -663,46 +653,6 @@ export default function ProjectsPage() {
                     AGENTS DASHBOARD
                   </Btn>
                 </div>
-
-                {showAgentUsage && (
-                  <div style={{ marginTop: 12, border: "1px solid #1a222a", borderRadius: 4, padding: 10, background: "#070a0d" }}>
-                    <div style={{ fontSize: 10, color: "#7fa8bf", letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>
-                      Agent Command Manual
-                    </div>
-
-                    <div style={{ fontSize: 10, color: "#6e8796", marginBottom: 4 }}>Download latest script</div>
-                    <div style={{ fontFamily: "monospace", fontSize: 11, color: "#a7d97a", marginBottom: 8, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-{(() => {
-  const origin = typeof window !== "undefined" ? window.location.origin : "http://your-logic-server";
-  return `$script=\"$env:TEMP\\log_sender.py\"\niwr \"${origin}/api/logicx/script\" -OutFile $script`;
-})()}
-                    </div>
-
-                    <div style={{ fontSize: 10, color: "#6e8796", marginBottom: 4 }}>Run agent (single path)</div>
-                    <div style={{ fontFamily: "monospace", fontSize: 11, color: "#a7d97a", marginBottom: 8, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-{(() => {
-  const project = projects.find((x) => x.id === agentSetupProjectId);
-  const key = apiKeys[agentSetupProjectId] || "<api-key>";
-  const origin = typeof window !== "undefined" ? window.location.origin : "http://your-logic-server";
-  return `python $script --api-url \"${origin}\" --api-key \"${key}\" --project-id \"${project?.id ?? "<project-id>"}\" --log-path \"C:/inetpub/logs/LogFiles/**/*.log\" --max-retries 5`;
-})()}
-                    </div>
-
-                    <div style={{ fontSize: 10, color: "#6e8796", marginBottom: 4 }}>Run agent (multiple paths)</div>
-                    <div style={{ fontFamily: "monospace", fontSize: 11, color: "#a7d97a", marginBottom: 8, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-{(() => {
-  const project = projects.find((x) => x.id === agentSetupProjectId);
-  const key = apiKeys[agentSetupProjectId] || "<api-key>";
-  const origin = typeof window !== "undefined" ? window.location.origin : "http://your-logic-server";
-  return `python $script --api-url \"${origin}\" --api-key \"${key}\" --project-id \"${project?.id ?? "<project-id>"}\" --log-path \"C:/inetpub/logs/LogFiles/**/*.log\" --log-path \"C:/Windows/System32/LogFiles/Firewall/*.log\" --max-retries 5`;
-})()}
-                    </div>
-
-                    <div style={{ color: "#8fa6b3", fontSize: 11, lineHeight: 1.45 }}>
-                      If logs are not being received, verify the project API key, confirm the server URL is reachable from the agent host, and check the terminal output from the Python process.
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div style={{ background: "#0a0d10", border: "1px solid #1a222a", borderRadius: 6, padding: 12 }}>

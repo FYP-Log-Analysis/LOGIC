@@ -30,6 +30,7 @@ const NAV_WEB = [
 const NAV_WINDOWS = [
   { key: "windows-agents", href: "/windows-agents", label: "Windows Agents", analystOnly: true },
   { key: "windows-analysis", href: "/windows-analysis", label: "Rule Based Detection", analystOnly: true },
+  { key: "rules-setup", href: "/rules-setup", label: "Rules Setup", analystOnly: true },
   {
     key: "windows-behavioral",
     href: "/windows-behavioral",

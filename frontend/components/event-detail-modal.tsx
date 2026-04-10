@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useEffect } from "react";
 
 interface EventDetailModalProps {
@@ -7,9 +8,11 @@ interface EventDetailModalProps {
   subtitle?: string;
   payload: unknown;
   onClose: () => void;
+  actions?: ReactNode;
+  children?: ReactNode;
 }
 
-export function EventDetailModal({ title, subtitle, payload, onClose }: EventDetailModalProps) {
+export function EventDetailModal({ title, subtitle, payload, onClose, actions, children }: EventDetailModalProps) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -79,6 +82,21 @@ export function EventDetailModal({ title, subtitle, payload, onClose }: EventDet
           </button>
         </div>
 
+        {actions && (
+          <div
+            style={{
+              borderBottom: "1px solid #1f1f1f",
+              padding: "10px 16px",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              justifyContent: "space-between",
+            }}
+          >
+            {actions}
+          </div>
+        )}
+
         <div style={{ overflow: "auto", padding: 16 }}>
           <div
             style={{
@@ -102,6 +120,20 @@ export function EventDetailModal({ title, subtitle, payload, onClose }: EventDet
               {JSON.stringify(payload, null, 2)}
             </pre>
           </div>
+
+          {children && (
+            <div
+              style={{
+                marginTop: 12,
+                background: "#090909",
+                border: "1px solid #1a1a1a",
+                borderRadius: 4,
+                padding: 12,
+              }}
+            >
+              {children}
+            </div>
+          )}
         </div>
       </div>
     </div>

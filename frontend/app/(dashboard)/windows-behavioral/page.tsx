@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import { runWindowsBehavioralAnalysis, getWindowsBehavioralResults } from "@/lib/client";
 import { useAuthStore } from "@/lib/store";
 import LineChart from "@/components/charts/line-chart";
-import HawkinsChat from "@/components/hawkins-chat";
 import {
   WindowsSectionHeader,
   WindowsMetricCard,
@@ -101,7 +100,6 @@ export default function WindowsBehavioralPage() {
   if (!activeProject?.id) {
     return (
       <WindowsEmptyState
-        icon="🖥️"
         title="No Project Selected"
         message="Select a Windows project from the sidebar to view behavioral analysis"
       />
@@ -203,7 +201,7 @@ export default function WindowsBehavioralPage() {
 
       {error && (
         <div style={{ padding: "12px", background: "#3d1a1a", border: "1px solid #8b3d3d", borderRadius: "4px", color: "#ff6b6b", fontSize: "11px" }}>
-          ⚠️ {error}
+          {error}
         </div>
       )}
 
@@ -217,27 +215,19 @@ export default function WindowsBehavioralPage() {
             <WindowsMetricCard
               label="Total Windows"
               value={(result.total_windows ?? 0).toLocaleString()}
-              accent="#7cb342"
-              icon="🪟"
             />
             <WindowsMetricCard
               label="Anomalous Windows"
               value={(result.anomalous_windows ?? 0).toLocaleString()}
-              accent="#ff8800"
-              icon="⚠️"
               sublabel={`${result.total_windows > 0 ? ((result.anomalous_windows / result.total_windows) * 100).toFixed(1) : 0}% of total`}
             />
             <WindowsMetricCard
               label="Window Size"
               value={`${result.window_minutes} min`}
-              accent="#4488ff"
-              icon="⏱️"
             />
             <WindowsMetricCard
               label="Avg Anomaly Score"
               value={`${avgAnomalyScore}%`}
-              accent="#f0c040"
-              icon="📊"
             />
           </WindowsStatGrid>
 
@@ -276,7 +266,6 @@ export default function WindowsBehavioralPage() {
             </WindowsDataPanel>
           ) : (
             <WindowsEmptyState
-              icon="✅"
               title="No Anomalies Detected"
               message="All time windows appear to have normal behavioral patterns"
             />
@@ -285,7 +274,7 @@ export default function WindowsBehavioralPage() {
           {/* Status Info */}
           {result?.status && result.status !== "ok" && (
             <div style={{ marginTop: 20, padding: "12px", background: "#2a2410", border: "1px solid #5a5020", borderRadius: "4px", fontSize: "11px", color: "#f0c040" }}>
-              ℹ️ Status: {result.status.toUpperCase().replace(/_/g, " ")}
+              Status: {result.status.toUpperCase().replace(/_/g, " ")}
               {result.status.includes("insufficient") && " — Not enough data for ML model (need ≥5 windows)"}
               {result.status.includes("unavailable") && " — scikit-learn not available"}
             </div>
@@ -295,7 +284,6 @@ export default function WindowsBehavioralPage() {
 
       {!loading && !result && !error && (
         <WindowsEmptyState
-          icon="🤖"
           title="No Analysis Results"
           message="Behavioral analysis has not been run yet for this project"
           action={
@@ -305,16 +293,6 @@ export default function WindowsBehavioralPage() {
           }
         />
       )}
-
-      <div style={{ marginTop: 40 }}>
-        <HawkinsChat
-          title="Hawkins — Anomalous Windows"
-          description="Ask about anomalies and behavioral patterns"
-          dataSummary={result ? `${result.anomalous_windows} anomalies in ${result.total_windows} windows` : "No analysis run yet"}
-          componentKey="windows-behavioral"
-          helpGuide="Try: 'What time windows had the highest anomaly scores?' or 'Which computers are most anomalous?'"
-        />
-      </div>
     </main>
   );
 }

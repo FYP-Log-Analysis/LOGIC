@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Any, Dict, Optional
 from api.deps import UserInDB, get_current_user
 from api.routes.projects import _normalize_project_id
+from api.services.llm_service import async_analyse_windows_event
 import json
 import logging
 import uuid
@@ -150,8 +151,42 @@ class WindowsAnalysisRequest(BaseModel):
     upload_id: Optional[str] = None
 
 
+class WindowsEventExplainRequest(BaseModel):
+    event: Dict[str, Any]
+    project_id: Optional[str] = None
+
+
 # In-memory run tracking
 _windows_runs: dict = {}
+
+
+@router.post("/windows/explain-event")
+async def explain_windows_event(
+    request: WindowsEventExplainRequest,
+    _user: UserInDB = Depends(get_current_user),
+) -> Dict:
+    """Explain one Windows event record using Groq LLM."""
+    if request.project_id:
+        project_id = _normalize_project_id(request.project_id)
+        from core.storage.sqlite_store import get_project
+
+        project = get_project(project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found.")
+        if project.get("project_type") != "windows":
+            raise HTTPException(status_code=400, detail="This endpoint is for WINDOWS projects only.")
+
+    if not isinstance(request.event, dict) or not request.event:
+        raise HTTPException(status_code=400, detail="event payload is required.")
+
+    result = await async_analyse_windows_event(request.event)
+    if result.get("status") == "error":
+        raise HTTPException(status_code=500, detail=result.get("error_message") or "Event explanation failed")
+
+    return {
+        "status": "success",
+        **result,
+    }
 
 
 @router.post("/windows/run-sigma")

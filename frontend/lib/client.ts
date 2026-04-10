@@ -595,6 +595,23 @@ export async function getWindowsBehavioralResults(
   return apiGet<WindowsBehavioralResult>(buildQuery("api/analysis/windows/behavioral/results", opts));
 }
 
+export interface WindowsEventExplanationResponse {
+  status: string;
+  backend?: string;
+  model?: string;
+  analysis?: string;
+}
+
+export async function explainWindowsEvent(
+  event: Record<string, unknown>,
+  projectId?: string,
+): Promise<WindowsEventExplanationResponse> {
+  return apiPost<WindowsEventExplanationResponse>("api/analysis/windows/explain-event", {
+    event,
+    project_id: projectId,
+  });
+}
+
 // ── Admin ─────────────────────────────────────────────────────────────────────
 
 export async function adminStats() {

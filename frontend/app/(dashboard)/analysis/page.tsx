@@ -12,7 +12,6 @@ import {
   Spinner,
   AlertBanner,
 } from "@/components/ui-primitives";
-import HawkinsChat from "@/components/hawkins-chat";
 
 interface TimeRange { start?: string; end?: string; total_logs?: number; }
 interface RunResult {
@@ -246,15 +245,6 @@ export default function AnalysisPage() {
         <AlertBanner type="error" message={result.error ?? result.error_msg ?? "Analysis failed"} />
       )}
 
-      <div style={{ marginTop: 40 }}>
-        <HawkinsChat
-          title="Hawkins — Analysis"
-          description="Ask about rule detections, severity distribution, or threat patterns"
-          dataSummary={stats ? `${stats.total_logs} logs, ${stats.flagged_logs} flagged, ${stats.rule_matches} rule matches` : "No analysis run yet"}
-          componentKey="analysis"
-          helpGuide="Try: 'Which rules triggered most often?' or 'Summarise the severity distribution'"
-        />
-      </div>
     </div>
   );
 }

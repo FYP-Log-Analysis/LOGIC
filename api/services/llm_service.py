@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from typing import Dict
+import json
 
 from groq import Groq
 import os
@@ -158,3 +159,51 @@ async def async_analyse_detection_results(detection_data: Dict) -> Dict:
 async def async_analyse_specific_match(match_data: Dict) -> Dict:
     """Non-blocking wrapper around analyse_specific_match."""
     return await asyncio.to_thread(analyse_specific_match, match_data)
+
+
+def analyse_windows_event(event_data: Dict) -> Dict:
+    """Explain one Windows event record with concise analyst-oriented guidance."""
+    try:
+        client = _get_client()
+        event_payload = dict(event_data or {})
+        event_blob = json.dumps(event_payload, ensure_ascii=False, default=str)
+        if len(event_blob) > 16000:
+            event_blob = event_blob[:16000] + "\n... [truncated]"
+
+        system_prompt = (
+            "You are a Windows Security analyst. "
+            "Explain the event in concise, actionable terms for SOC triage."
+        )
+        user_prompt = (
+            "Analyze this Windows event and respond in Markdown with these sections:\n"
+            "1) What happened\n"
+            "2) Why it matters\n"
+            "3) Benign vs suspicious indicators\n"
+            "4) Recommended next checks\n\n"
+            f"Event JSON:\n{event_blob}"
+        )
+
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            max_tokens=700,
+            temperature=0.2,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+
+        return {
+            "status": "success",
+            "backend": "groq",
+            "model": "llama-3.3-70b-versatile",
+            "analysis": response.choices[0].message.content,
+        }
+    except Exception as exc:
+        logger.error("Windows event analysis failed: %s", exc, exc_info=True)
+        return {"status": "error", "error_message": str(exc)}
+
+
+async def async_analyse_windows_event(event_data: Dict) -> Dict:
+    """Non-blocking wrapper around analyse_windows_event."""
+    return await asyncio.to_thread(analyse_windows_event, event_data)

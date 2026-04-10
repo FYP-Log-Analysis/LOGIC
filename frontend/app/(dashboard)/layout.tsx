@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/store";
 import Sidebar from "@/components/sidebar";
 import { getLogTimeRange } from "@/lib/client";
+import HawkinsChat from "@/components/hawkins-chat";
 
 // ── Time-range change modal (inline in layout) ─────────────────────────────
 
@@ -202,8 +203,9 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, setUser, hydrated, setHydrated } = useAuthStore();
+  const { user, setUser, hydrated, setHydrated, activeProject, timeRange } = useAuthStore();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (hydrated) return;
@@ -270,6 +272,20 @@ export default function DashboardLayout({
           {children}
         </main>
       </div>
+
+      <HawkinsChat
+        title="Hawkins — Assistant"
+        description="Workspace-wide SOC copilot for this dashboard"
+        dataSummary={{
+          page: pathname,
+          project_id: activeProject?.id ?? null,
+          project_name: activeProject?.name ?? null,
+          project_type: activeProject?.project_type ?? null,
+          time_range: timeRange ?? null,
+        }}
+        componentKey={`global${pathname || "/dashboard"}`}
+        helpGuide="Ask about the current page, detections, anomalies, timelines, or next investigation actions."
+      />
     </div>
   );
 }

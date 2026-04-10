@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getWindowsSigmaResults, getWindowsIOCs, type WindowsIOCs } from "@/lib/client";
 import { useAuthStore } from "@/lib/store";
 import { ThreatTimeline, type ThreatEvent } from "@/components/threat-timeline";
-import HawkinsChat from "@/components/hawkins-chat";
 import { EventDetailModal } from "@/components/event-detail-modal";
 import {
   WindowsSectionHeader,
@@ -488,15 +487,6 @@ export default function WindowsAnalysisPage() {
           }
         />
       )}
-
-      <HawkinsChat
-        title="Hawkins — Windows Detection"
-        description="Deep forensic analysis for Sigma detections and suspicious Windows events"
-        dataSummary={`Sigma matches: ${filteredSigmaMatches.length}. ${selectedThreat ? "A specific threat is attached for deep forensics." : "No threat selected yet."}`}
-        componentKey="windows-analysis"
-        helpGuide="Select a timeline event or table row, then ask for root-cause hypotheses, attack chain mapping, and exact next investigative steps."
-        selectedThreat={selectedThreat}
-      />
 
       {selectedThreat && (
         <EventDetailModal

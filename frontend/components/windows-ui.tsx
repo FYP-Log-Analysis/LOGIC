@@ -262,7 +262,7 @@ export function WindowsButton({
       disabled={disabled || loading}
       {...props}
     >
-      {loading ? <span style={{ fontSize: 10 }}>⏳</span> : children}
+      {loading ? <span style={{ fontSize: 10, letterSpacing: 0.6 }}>LOADING...</span> : children}
     </button>
   );
 }
@@ -282,7 +282,6 @@ export function WindowsEventTable({ columns, data, onRowClick, emptyMessage = "N
         padding: 40,
         color: "#666",
       }}>
-        <div style={{ fontSize: 24, marginBottom: 8 }}>⚠️</div>
         <div style={{ fontSize: 12 }}>{emptyMessage}</div>
       </div>
     );

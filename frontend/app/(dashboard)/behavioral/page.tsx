@@ -14,7 +14,6 @@ import {
 import BarChart from "@/components/charts/bar-chart";
 import ScatterChart from "@/components/charts/scatter-chart";
 import LineChart from "@/components/charts/line-chart";
-import HawkinsChat from "@/components/hawkins-chat";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -458,16 +457,6 @@ export default function BehavioralPage() {
           {tab === "Visitor Rates" && <VisitorRatesTab data={data.visitor_rates ?? []} />}
         </>
       )}
-
-      <div style={{ marginTop: 40 }}>
-        <HawkinsChat
-          title="Hawkins — Behavioral"
-          description="Ask about rate spikes, URL scanning activity, or anomalous visitor patterns"
-          dataSummary={summary ? `${summary.total_rate_spikes ?? summary.total_rate_spike_windows ?? 0} rate spikes, ${summary.total_url_enumerators ?? summary.total_enumeration_alerts ?? 0} URL enumerators, ${summary.total_status_spikes ?? summary.total_status_spike_windows ?? 0} status spikes` : "No behavioral data"}
-          componentKey="behavioral"
-          helpGuide="Try: 'Which IPs are scanning for URLs?' or 'Describe the rate spike anomalies'"
-        />
-      </div>
     </div>
   );
 }

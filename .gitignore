@@ -1,20 +1,55 @@
-# v0 runtime files
-__v0_runtime_loader.js
-__v0_devtools.tsx
-__v0_jsx-dev-runtime.ts
-
-# Common ignores
-node_modules
-.next/
-.venv/
-venv/
-.env
-.env*.local
+# Operating system / editor
 .DS_Store
 **/.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python
 __pycache__/
 **/__pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 
+# Python environments
+.venv/
+venv/
+env/
+ENV/
 
-data/*.db   
+# Node / Next.js
+node_modules/
+.next/
+out/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Logs / temp files
+*.log
+logs/
+tmp/
+temp/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Runtime project data and analyzed outputs
+data/projects/
+data/crs_audit/
+
+# Keep detection/rule content tracked
+!data/crs_rules/
+!data/sigma_rules/

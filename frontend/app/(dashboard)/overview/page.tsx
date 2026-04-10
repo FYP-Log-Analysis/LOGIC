@@ -2,20 +2,19 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import {
+  explainWindowsEvent,
   getLogStatistics,
   getLiveAgentMonitor,
   getRawLogs,
-  getWindowsSigmaRuleDetail,
-  getWindowsSigmaRules,
   type LiveAgentMonitorData,
   type LogStatistics,
   type RawLogEntry,
-  type WindowsSigmaRuleSummary,
 } from "@/lib/client";
 import { useAuthStore } from "@/lib/store";
 import { SectionHeader, MetricCard, Divider, Spinner, Btn } from "@/components/ui-primitives";
 import BarChart from "@/components/charts/bar-chart";
 import PieChart from "@/components/charts/pie-chart";
+import { EventDetailModal } from "@/components/event-detail-modal";
 
 function heatColor(count: number, maxCount: number): string {
   if (maxCount === 0 || count === 0) return "#111";
@@ -33,6 +32,65 @@ function formatUptime(totalSeconds: number): string {
   return `${h}h ${m}m ${s}s`;
 }
 
+const LOGON_TYPE_LABELS: Record<string, string> = {
+  "2": "2 Interactive",
+  "3": "3 Network",
+  "4": "4 Batch",
+  "5": "5 Service",
+  "7": "7 Unlock",
+  "8": "8 NetworkCleartext",
+  "9": "9 NewCredentials",
+  "10": "10 RemoteInteractive",
+  "11": "11 CachedInteractive",
+};
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function eventDataOf(entry: RawLogEntry): Record<string, unknown> {
+  return asRecord((entry as Record<string, unknown>).event_data);
+}
+
+function isSecurityEvtxEntry(entry: RawLogEntry): boolean {
+  const row = asRecord(entry);
+  const channel = String(row.channel ?? "").toLowerCase();
+  const source = String(row.source ?? "").toLowerCase();
+  return channel.includes("security") || source.endsWith("security.evtx") || source.includes("/security.evtx");
+}
+
+function getSecurityLogonType(entry: RawLogEntry): string {
+  if (!isSecurityEvtxEntry(entry)) return "-";
+  const data = eventDataOf(entry);
+  const raw = data.LogonType ?? data.logon_type ?? data.logonType;
+  if (raw == null) return "-";
+  const key = String(raw).trim();
+  return LOGON_TYPE_LABELS[key] ?? key;
+}
+
+function getSecurityOutcome(entry: RawLogEntry): "Success" | "Failure" | "Unknown" {
+  if (!isSecurityEvtxEntry(entry)) return "Unknown";
+
+  const data = eventDataOf(entry);
+  const rawStatus = data.Status ?? data.status;
+  if (rawStatus != null) {
+    const txt = String(rawStatus).trim().toLowerCase();
+    if (txt === "success") return "Success";
+    if (txt === "failure" || txt === "failed") return "Failure";
+    if (txt.startsWith("0x")) {
+      const parsed = Number.parseInt(txt.slice(2), 16);
+      if (!Number.isNaN(parsed)) return parsed === 0 ? "Success" : "Failure";
+    }
+    const parsed = Number(txt);
+    if (!Number.isNaN(parsed)) return parsed === 0 ? "Success" : "Failure";
+  }
+
+  const eventId = Number((entry as Record<string, unknown>).event_id ?? Number.NaN);
+  if (eventId === 4624) return "Success";
+  if (eventId === 4625) return "Failure";
+  return "Unknown";
+}
+
 export default function OverviewPage() {
   const [stats, setStats] = useState<LogStatistics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,11 +101,10 @@ export default function OverviewPage() {
   const [liveError, setLiveError] = useState<string | null>(null);
   const [logFilter, setLogFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [sigmaRuleCatalog, setSigmaRuleCatalog] = useState<WindowsSigmaRuleSummary[]>([]);
-  const [sigmaRuleLoading, setSigmaRuleLoading] = useState(false);
-  const [sigmaRuleError, setSigmaRuleError] = useState<string | null>(null);
-  const [ruleViewLoading, setRuleViewLoading] = useState(false);
-  const [selectedRule, setSelectedRule] = useState<{ rule: WindowsSigmaRuleSummary; yaml: string } | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<RawLogEntry | null>(null);
+  const [eventExplanation, setEventExplanation] = useState<string>("");
+  const [eventExplainLoading, setEventExplainLoading] = useState(false);
+  const [eventExplainError, setEventExplainError] = useState<string | null>(null);
   const { activeProject } = useAuthStore();
   const isWindowsProject = activeProject?.project_type === "windows";
   const PAGE_SIZE = 50;
@@ -67,25 +124,6 @@ export default function OverviewPage() {
       })
       .finally(() => setLoading(false));
   }, [activeProject]);
-
-  const loadSigmaRules = useCallback(() => {
-    if (!isWindowsProject) {
-      setSigmaRuleCatalog([]);
-      setSigmaRuleLoading(false);
-      setSigmaRuleError(null);
-      return;
-    }
-
-    setSigmaRuleLoading(true);
-    setSigmaRuleError(null);
-    getWindowsSigmaRules()
-      .then((catalog) => setSigmaRuleCatalog(catalog.rules || []))
-      .catch((e) => {
-        setSigmaRuleCatalog([]);
-        setSigmaRuleError(e instanceof Error ? e.message : "Failed to load Sigma rules.");
-      })
-      .finally(() => setSigmaRuleLoading(false));
-  }, [isWindowsProject]);
 
   const loadLiveWindow = useCallback(async (silent = false) => {
     if (!activeProject?.id) {
@@ -137,47 +175,12 @@ export default function OverviewPage() {
     }
   }, [activeProject?.id, isWindowsProject]);
 
-  const openRuleView = useCallback(async (rulePath: string) => {
-    setRuleViewLoading(true);
-    try {
-      const detail = await getWindowsSigmaRuleDetail(rulePath);
-      setSelectedRule(detail);
-    } catch (e) {
-      setSigmaRuleError(e instanceof Error ? e.message : "Failed to load Sigma rule details.");
-    } finally {
-      setRuleViewLoading(false);
-    }
-  }, []);
-
-  const sigmaRulesByFolder = useMemo(() => {
-    const grouped = new Map<string, WindowsSigmaRuleSummary[]>();
-    for (const rule of sigmaRuleCatalog) {
-      const rawPath = (rule.rule_path || "").replace(/\\/g, "/").replace(/^\/+/, "");
-      const lastSlash = rawPath.lastIndexOf("/");
-      const folder = lastSlash > -1 ? rawPath.slice(0, lastSlash) : "(root)";
-      const bucket = grouped.get(folder) ?? [];
-      bucket.push(rule);
-      grouped.set(folder, bucket);
-    }
-
-    return Array.from(grouped.entries())
-      .map(([folder, rules]) => ({
-        folder,
-        rules: [...rules].sort((a, b) => (a.rule_path || "").localeCompare(b.rule_path || "")),
-      }))
-      .sort((a, b) => a.folder.localeCompare(b.folder));
-  }, [sigmaRuleCatalog]);
-
   useEffect(() => {
     const timer = window.setTimeout(() => {
       loadData();
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loadData]);
-
-  useEffect(() => {
-    loadSigmaRules();
-  }, [loadSigmaRules]);
 
   useEffect(() => {
     if (!activeProject?.id) return;
@@ -206,13 +209,17 @@ export default function OverviewPage() {
         const computer = String((l as Record<string, unknown>).computer ?? "").toLowerCase();
         const user = String((l as Record<string, unknown>).auth_user ?? "").toLowerCase();
         const raw = String((l as Record<string, unknown>).raw ?? "").toLowerCase();
+        const logonType = getSecurityLogonType(l).toLowerCase();
+        const outcome = getSecurityOutcome(l).toLowerCase();
         return (
           (l.client_ip ?? "").toLowerCase().includes(q) ||
           eventId.includes(q) ||
           channel.includes(q) ||
           computer.includes(q) ||
           user.includes(q) ||
-          raw.includes(q)
+          raw.includes(q) ||
+          logonType.includes(q) ||
+          outcome.includes(q)
         );
       });
     }
@@ -241,6 +248,28 @@ export default function OverviewPage() {
     loadData();
     void loadLiveWindow(false);
   }, [loadData, loadLiveWindow]);
+
+  const openEventDetail = useCallback((entry: RawLogEntry) => {
+    setSelectedEvent(entry);
+    setEventExplanation("");
+    setEventExplainError(null);
+    setEventExplainLoading(false);
+  }, []);
+
+  const explainSelectedEvent = useCallback(async () => {
+    if (!selectedEvent || !activeProject?.id) return;
+
+    setEventExplainLoading(true);
+    setEventExplainError(null);
+    try {
+      const response = await explainWindowsEvent(selectedEvent as Record<string, unknown>, activeProject.id);
+      setEventExplanation(response.analysis || "No explanation returned by Groq.");
+    } catch (e) {
+      setEventExplainError(e instanceof Error ? e.message : "Failed to explain event.");
+    } finally {
+      setEventExplainLoading(false);
+    }
+  }, [selectedEvent, activeProject?.id]);
 
   const liveSection = (
     <>
@@ -322,7 +351,7 @@ export default function OverviewPage() {
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: "monospace" }}>
                   <thead>
                     <tr style={{ background: "#0d0d0d" }}>
-                      {["#", "Time", "Event ID", "Channel", "Computer", "User", "IP"].map((col) => (
+                      {["#", "Time", "Event ID", "Channel", "Logon Type", "Status", "Computer", "User", "IP"].map((col) => (
                         <th
                           key={col}
                           style={{
@@ -347,10 +376,18 @@ export default function OverviewPage() {
                       const channel = (entry as Record<string, unknown>).channel;
                       const computer = (entry as Record<string, unknown>).computer;
                       const authUser = (entry as Record<string, unknown>).auth_user;
+                      const securityEntry = isSecurityEvtxEntry(entry);
+                      const logonType = getSecurityLogonType(entry);
+                      const eventStatus = getSecurityOutcome(entry);
+                      const statusColor =
+                        eventStatus === "Success" ? "#70d08c" :
+                        eventStatus === "Failure" ? "#d56a6a" : "#9a9a9a";
                       return (
                         <tr
                           key={`${entry.timestamp ?? ""}-${absoluteIdx}`}
-                          style={{ borderBottom: "1px solid #141414", background: idx % 2 === 0 ? "transparent" : "#0a0a0a" }}
+                          style={{ borderBottom: "1px solid #141414", background: idx % 2 === 0 ? "transparent" : "#0a0a0a", cursor: "pointer" }}
+                          title="Click to inspect full event JSON and request a Groq explanation"
+                          onClick={() => openEventDetail(entry)}
                         >
                           <td style={{ padding: "6px 12px", color: "#333", minWidth: 40 }}>{absoluteIdx + 1}</td>
                           <td style={{ padding: "6px 12px", color: "#555", whiteSpace: "nowrap" }}>
@@ -361,6 +398,12 @@ export default function OverviewPage() {
                           </td>
                           <td style={{ padding: "6px 12px", color: "#8fb9ff", whiteSpace: "nowrap" }}>
                             {channel != null && String(channel) ? String(channel) : "—"}
+                          </td>
+                          <td style={{ padding: "6px 12px", color: securityEntry ? "#d4c585" : "#444", whiteSpace: "nowrap" }}>
+                            {securityEntry ? logonType : "-"}
+                          </td>
+                          <td style={{ padding: "6px 12px", color: securityEntry ? statusColor : "#444", whiteSpace: "nowrap", fontWeight: 600 }}>
+                            {securityEntry ? eventStatus : "-"}
                           </td>
                           <td style={{ padding: "6px 12px", color: "#e8e8e8", whiteSpace: "nowrap" }}>
                             {computer != null && String(computer) ? String(computer) : "—"}
@@ -569,86 +612,6 @@ export default function OverviewPage() {
 
       <Divider />
 
-      {isWindowsProject && (
-        <div className="section-block">
-          <div className="surface-panel" style={{ minHeight: 0, overflow: "auto" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "10px" }}>
-              <h3 style={{ margin: 0, color: "#7cb342", fontSize: "12px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.8px" }}>
-                Sigma Rule Library
-              </h3>
-              <div style={{ color: "#6f6f6f", fontSize: "11px" }}>{sigmaRuleCatalog.length} rules</div>
-            </div>
-
-            {sigmaRuleLoading && (
-              <div style={{ color: "#666", fontSize: "11px", padding: "8px 0" }}>Loading Sigma rules...</div>
-            )}
-
-            {!sigmaRuleLoading && sigmaRuleError && (
-              <div style={{ color: "#ff8a80", fontSize: "11px", padding: "8px 0" }}>{sigmaRuleError}</div>
-            )}
-
-            {!sigmaRuleLoading && !sigmaRuleError && sigmaRuleCatalog.length === 0 && (
-              <div style={{ color: "#666", fontSize: "11px", padding: "8px 0" }}>No Sigma rules found.</div>
-            )}
-
-            {!sigmaRuleLoading && sigmaRuleCatalog.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "320px", overflowY: "auto" }}>
-                {sigmaRulesByFolder.map((group) => (
-                  <div key={group.folder} style={{ border: "1px solid #1f1f1f", borderRadius: "4px", background: "#090909", padding: "8px" }}>
-                    <div style={{ color: "#7cb342", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: "8px", fontFamily: "monospace" }}>
-                      data/sigma_rules/{group.folder === "(root)" ? "" : group.folder} · {group.rules.length} file{group.rules.length === 1 ? "" : "s"}
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                      {group.rules.map((rule) => (
-                        <div
-                          key={rule.rule_path}
-                          style={{
-                            border: "1px solid #1f1f1f",
-                            borderRadius: "4px",
-                            background: "#0b0b0b",
-                            padding: "10px",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "10px",
-                          }}
-                        >
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ color: "#d0d0d0", fontSize: "12px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontFamily: "monospace" }}>
-                              {rule.rule_path.split("/").pop() || rule.rule_path}
-                            </div>
-                            <div style={{ color: "#707070", fontSize: "11px", marginTop: "3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontFamily: "monospace" }}>
-                              {rule.rule_path}
-                            </div>
-                            <div style={{ color: "#707070", fontSize: "11px", marginTop: "2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                              {rule.id} · {rule.level} · {rule.title}
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => openRuleView(rule.rule_path)}
-                            disabled={ruleViewLoading}
-                            style={{
-                              border: "1px solid #355a3b",
-                              color: "#7cb342",
-                              background: "#101a10",
-                              fontSize: "11px",
-                              borderRadius: "4px",
-                              padding: "6px 10px",
-                              cursor: ruleViewLoading ? "not-allowed" : "pointer",
-                            }}
-                          >
-                            VIEW
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       <div className="section-block">
         <div
           style={{
@@ -737,69 +700,42 @@ export default function OverviewPage() {
         )}
       </div>
 
-      {selectedRule && (
-        <div
-          onClick={() => setSelectedRule(null)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0, 0, 0, 0.72)",
-            zIndex: 1300,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "18px",
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: "min(900px, 96vw)",
-              maxHeight: "88vh",
-              overflowY: "auto",
-              borderRadius: "6px",
-              border: "1px solid #254226",
-              background: "#090d09",
-              padding: "14px",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ color: "#7cb342", fontSize: "13px", fontWeight: "bold" }}>{selectedRule.rule.title}</div>
-                <div style={{ color: "#79907d", fontSize: "11px", marginTop: "2px" }}>
-                  {selectedRule.rule.id} · {selectedRule.rule.level} · {selectedRule.rule.rule_path}
-                </div>
+      {selectedEvent && (
+        <EventDetailModal
+          title={`Windows Event ${String((selectedEvent as Record<string, unknown>).event_id ?? "") || "Unknown"}`}
+          subtitle={`Channel: ${String((selectedEvent as Record<string, unknown>).channel ?? "unknown")}`}
+          payload={selectedEvent}
+          onClose={() => setSelectedEvent(null)}
+          actions={(
+            <>
+              <div style={{ color: "#7f7f7f", fontSize: 11 }}>
+                Full raw JSON is shown below. Use Groq for quick analyst guidance.
               </div>
-              <button
-                onClick={() => setSelectedRule(null)}
-                style={{ border: "1px solid #355a3b", color: "#7cb342", background: "#101a10", fontSize: "11px", borderRadius: "2px", padding: "5px 9px", cursor: "pointer" }}
-              >
-                CLOSE
-              </button>
-            </div>
-
-            {selectedRule.rule.description && (
-              <p style={{ margin: "0 0 10px", color: "#98a398", fontSize: "11px" }}>{selectedRule.rule.description}</p>
-            )}
-
-            <pre
-              style={{
-                margin: 0,
-                background: "#060806",
-                border: "1px solid #1b2a1c",
-                borderRadius: "4px",
-                padding: "10px",
-                color: "#d3dfd3",
-                fontSize: "11px",
-                lineHeight: 1.45,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-              }}
-            >
-              {selectedRule.yaml}
-            </pre>
+              <Btn variant="ghost" onClick={explainSelectedEvent} disabled={eventExplainLoading}>
+                {eventExplainLoading ? "Explaining..." : "Explain With Groq"}
+              </Btn>
+            </>
+          )}
+        >
+          <div style={{ fontSize: 10, color: "#777", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 8 }}>
+            Groq Explanation
           </div>
-        </div>
+          {eventExplainError && (
+            <div style={{ color: "#ff8a80", fontSize: 12, marginBottom: 8 }}>
+              {eventExplainError}
+            </div>
+          )}
+          {!eventExplainError && !eventExplanation && (
+            <div style={{ color: "#777", fontSize: 12 }}>
+              Click "Explain With Groq" to generate a concise security interpretation.
+            </div>
+          )}
+          {eventExplanation && (
+            <div style={{ color: "#d0d0d0", fontSize: 12, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+              {eventExplanation}
+            </div>
+          )}
+        </EventDetailModal>
       )}
     </div>
   );

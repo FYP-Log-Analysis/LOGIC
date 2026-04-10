@@ -3,9 +3,13 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   getLogStatistics,
+  getLiveAgentMonitor,
+  getRawLogs,
   getWindowsSigmaRuleDetail,
   getWindowsSigmaRules,
+  type LiveAgentMonitorData,
   type LogStatistics,
+  type RawLogEntry,
   type WindowsSigmaRuleSummary,
 } from "@/lib/client";
 import { useAuthStore } from "@/lib/store";
@@ -22,10 +26,23 @@ function heatColor(count: number, maxCount: number): string {
   return "#1a2a18";
 }
 
+function formatUptime(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return `${h}h ${m}m ${s}s`;
+}
+
 export default function OverviewPage() {
   const [stats, setStats] = useState<LogStatistics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [monitor, setMonitor] = useState<LiveAgentMonitorData | null>(null);
+  const [rawLogs, setRawLogs] = useState<RawLogEntry[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
+  const [logFilter, setLogFilter] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [sigmaRuleCatalog, setSigmaRuleCatalog] = useState<WindowsSigmaRuleSummary[]>([]);
   const [sigmaRuleLoading, setSigmaRuleLoading] = useState(false);
   const [sigmaRuleError, setSigmaRuleError] = useState<string | null>(null);
@@ -33,6 +50,7 @@ export default function OverviewPage() {
   const [selectedRule, setSelectedRule] = useState<{ rule: WindowsSigmaRuleSummary; yaml: string } | null>(null);
   const { activeProject } = useAuthStore();
   const isWindowsProject = activeProject?.project_type === "windows";
+  const PAGE_SIZE = 50;
 
   const loadData = useCallback(() => {
     if (!activeProject?.id) {
@@ -68,6 +86,56 @@ export default function OverviewPage() {
       })
       .finally(() => setSigmaRuleLoading(false));
   }, [isWindowsProject]);
+
+  const loadLiveWindow = useCallback(async (silent = false) => {
+    if (!activeProject?.id) {
+      setMonitor(null);
+      setRawLogs([]);
+      return;
+    }
+
+    if (!silent) {
+      setLogsLoading(true);
+      setLiveError(null);
+    }
+
+    try {
+      const logsPromise = isWindowsProject
+        ? getRawLogs({ projectId: activeProject.id, limit: 500, liveOnly: true })
+        : getRawLogs({ projectId: activeProject.id, limit: 500, liveOnly: true, excludeWindows: true });
+
+      const [monitorData, logs] = await Promise.all([
+        getLiveAgentMonitor(activeProject.id),
+        logsPromise,
+      ]);
+
+      setMonitor(monitorData);
+      if (isWindowsProject) {
+        const windowsOnly = logs.filter((entry) => {
+          const serverType = String(entry.server_type ?? "").toLowerCase();
+          return serverType === "windows_event" || serverType.includes("windows");
+        });
+        setRawLogs(windowsOnly.length > 0 ? windowsOnly : logs);
+      } else {
+        setRawLogs(
+          logs.filter((entry) => {
+            const serverType = String(entry.server_type ?? "").toLowerCase();
+            return !(serverType === "windows_event" || serverType.includes("windows"));
+          }),
+        );
+      }
+      setLiveError(null);
+    } catch (e) {
+      if (!silent) {
+        setRawLogs([]);
+      }
+      setLiveError(e instanceof Error ? e.message : "Failed to load live agent telemetry.");
+    } finally {
+      if (!silent) {
+        setLogsLoading(false);
+      }
+    }
+  }, [activeProject?.id, isWindowsProject]);
 
   const openRuleView = useCallback(async (rulePath: string) => {
     setRuleViewLoading(true);
@@ -111,6 +179,307 @@ export default function OverviewPage() {
     loadSigmaRules();
   }, [loadSigmaRules]);
 
+  useEffect(() => {
+    if (!activeProject?.id) return;
+
+    let cancelled = false;
+    loadLiveWindow(false);
+
+    const id = window.setInterval(async () => {
+      if (cancelled) return;
+      await loadLiveWindow(true);
+    }, 5000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [activeProject?.id, loadLiveWindow]);
+
+  const filteredLogs = useMemo(() => {
+    if (!logFilter.trim()) return rawLogs;
+    const q = logFilter.toLowerCase();
+    if (isWindowsProject) {
+      return rawLogs.filter((l) => {
+        const eventId = String((l as Record<string, unknown>).event_id ?? "");
+        const channel = String((l as Record<string, unknown>).channel ?? "").toLowerCase();
+        const computer = String((l as Record<string, unknown>).computer ?? "").toLowerCase();
+        const user = String((l as Record<string, unknown>).auth_user ?? "").toLowerCase();
+        const raw = String((l as Record<string, unknown>).raw ?? "").toLowerCase();
+        return (
+          (l.client_ip ?? "").toLowerCase().includes(q) ||
+          eventId.includes(q) ||
+          channel.includes(q) ||
+          computer.includes(q) ||
+          user.includes(q) ||
+          raw.includes(q)
+        );
+      });
+    }
+    return rawLogs.filter((l) =>
+      (l.client_ip ?? "").toLowerCase().includes(q) ||
+      (l.request_path ?? "").toLowerCase().includes(q) ||
+      (l.http_method ?? "").toLowerCase().includes(q) ||
+      String(l.status_code ?? "").includes(q) ||
+      (l.user_agent ?? "").toLowerCase().includes(q),
+    );
+  }, [rawLogs, logFilter, isWindowsProject]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE));
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const pagedLogs = filteredLogs.slice(pageStart, pageStart + PAGE_SIZE);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeProject?.id, logFilter]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
+  const refreshOverview = useCallback(() => {
+    loadData();
+    void loadLiveWindow(false);
+  }, [loadData, loadLiveWindow]);
+
+  const liveSection = (
+    <>
+      <div className="section-block">
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+            gap: 12,
+          }}
+        >
+          <MetricCard
+            label="Agent Status"
+            value={(monitor?.status ?? "idle").toUpperCase()}
+            accent={monitor?.status === "active" ? "#70d08c" : "#c5b27b"}
+          />
+          <MetricCard
+            label="Uptime"
+            value={formatUptime(monitor?.uptime_seconds ?? 0)}
+            sub={monitor?.last_batch_at ? `Last batch ${new Date(monitor.last_batch_at * 1000).toLocaleString()}` : "No batches yet"}
+          />
+          <MetricCard label="Total Live Logs" value={(monitor?.total_logs ?? 0).toLocaleString()} />
+          <MetricCard label="Last Host" value={monitor?.last_host || "—"} />
+        </div>
+      </div>
+
+      <div className="section-block">
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <div style={{ fontSize: 11, letterSpacing: 1.2, textTransform: "uppercase", color: "#888" }}>
+            Incoming Raw Logs
+            {rawLogs.length > 0 && (
+              <span style={{ color: "#444", marginLeft: 8 }}>
+                showing {Math.min(pageStart + PAGE_SIZE, filteredLogs.length).toLocaleString()} of {filteredLogs.length.toLocaleString()} filtered ({rawLogs.length.toLocaleString()} total)
+              </span>
+            )}
+          </div>
+          <Btn onClick={() => void loadLiveWindow(false)} style={{ marginLeft: "auto" }}>Refresh Live Logs</Btn>
+          {rawLogs.length > 0 && (
+            <input
+              type="text"
+              placeholder={isWindowsProject ? "Filter by event id, channel, computer, user, IP..." : "Filter by IP, path, method, status, user-agent..."}
+              value={logFilter}
+              onChange={(e) => setLogFilter(e.target.value)}
+              style={{
+                background: "#0d0d0d",
+                border: "1px solid #2a2a2a",
+                borderRadius: 4,
+                color: "#ccc",
+                fontSize: 11,
+                fontFamily: "monospace",
+                padding: "5px 10px",
+                outline: "none",
+                width: 320,
+              }}
+            />
+          )}
+        </div>
+
+        {liveError && (
+          <div style={{ color: "#ff8a80", fontSize: 12, marginBottom: 10 }}>
+            {liveError}
+          </div>
+        )}
+
+        {logsLoading ? (
+          <div style={{ textAlign: "center", padding: 24 }}><Spinner size={18} /></div>
+        ) : rawLogs.length === 0 ? (
+          <div style={{ color: "#444", fontSize: 12, border: "1px dashed #1e1e1e", borderRadius: 4, padding: 20 }}>
+            No log entries available. Upload logs or connect the agent to populate this view.
+          </div>
+        ) : filteredLogs.length === 0 ? (
+          <div style={{ color: "#444", fontSize: 12, border: "1px dashed #1e1e1e", borderRadius: 4, padding: 20 }}>
+            No entries match the current filter.
+          </div>
+        ) : (
+          <>
+            <div style={{ overflowX: "auto", border: "1px solid #1e1e1e", borderRadius: 4 }}>
+              {isWindowsProject ? (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: "monospace" }}>
+                  <thead>
+                    <tr style={{ background: "#0d0d0d" }}>
+                      {["#", "Time", "Event ID", "Channel", "Computer", "User", "IP"].map((col) => (
+                        <th
+                          key={col}
+                          style={{
+                            textAlign: "left",
+                            padding: "8px 12px",
+                            borderBottom: "1px solid #1e1e1e",
+                            color: "#555",
+                            fontWeight: 600,
+                            letterSpacing: 0.8,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedLogs.map((entry, idx) => {
+                      const absoluteIdx = pageStart + idx;
+                      const eventId = (entry as Record<string, unknown>).event_id;
+                      const channel = (entry as Record<string, unknown>).channel;
+                      const computer = (entry as Record<string, unknown>).computer;
+                      const authUser = (entry as Record<string, unknown>).auth_user;
+                      return (
+                        <tr
+                          key={`${entry.timestamp ?? ""}-${absoluteIdx}`}
+                          style={{ borderBottom: "1px solid #141414", background: idx % 2 === 0 ? "transparent" : "#0a0a0a" }}
+                        >
+                          <td style={{ padding: "6px 12px", color: "#333", minWidth: 40 }}>{absoluteIdx + 1}</td>
+                          <td style={{ padding: "6px 12px", color: "#555", whiteSpace: "nowrap" }}>
+                            {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : "—"}
+                          </td>
+                          <td style={{ padding: "6px 12px", color: "#f0c040", whiteSpace: "nowrap" }}>
+                            {eventId != null ? String(eventId) : "—"}
+                          </td>
+                          <td style={{ padding: "6px 12px", color: "#8fb9ff", whiteSpace: "nowrap" }}>
+                            {channel != null && String(channel) ? String(channel) : "—"}
+                          </td>
+                          <td style={{ padding: "6px 12px", color: "#e8e8e8", whiteSpace: "nowrap" }}>
+                            {computer != null && String(computer) ? String(computer) : "—"}
+                          </td>
+                          <td style={{ padding: "6px 12px", color: "#6ecb9e", whiteSpace: "nowrap" }}>
+                            {authUser != null && String(authUser) ? String(authUser) : "—"}
+                          </td>
+                          <td style={{ padding: "6px 12px", color: "#60a5fa", whiteSpace: "nowrap" }}>
+                            {entry.client_ip ?? "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: "monospace" }}>
+                  <thead>
+                    <tr style={{ background: "#0d0d0d" }}>
+                      {["#", "Time", "Method", "Path", "Status", "IP", "User-Agent"].map((col) => (
+                        <th
+                          key={col}
+                          style={{
+                            textAlign: "left",
+                            padding: "8px 12px",
+                            borderBottom: "1px solid #1e1e1e",
+                            color: "#555",
+                            fontWeight: 600,
+                            letterSpacing: 0.8,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedLogs.map((entry, idx) => {
+                      const absoluteIdx = pageStart + idx;
+                      const sc = entry.status_code ?? 0;
+                      const statusColor =
+                        sc >= 500 ? "#ff4444" :
+                        sc >= 400 ? "#ff8800" :
+                        sc >= 300 ? "#f0c040" :
+                        sc >= 200 ? "#4caf50" : "#666";
+                      const path = entry.request_path ?? "";
+                      const ua = entry.user_agent ?? "";
+                      return (
+                        <tr
+                          key={`${entry.timestamp ?? ""}-${absoluteIdx}`}
+                          style={{ borderBottom: "1px solid #141414", background: idx % 2 === 0 ? "transparent" : "#0a0a0a" }}
+                        >
+                          <td style={{ padding: "6px 12px", color: "#333", minWidth: 40 }}>{absoluteIdx + 1}</td>
+                          <td style={{ padding: "6px 12px", color: "#555", whiteSpace: "nowrap" }}>
+                            {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : "—"}
+                          </td>
+                          <td style={{ padding: "6px 12px", color: "#a78bfa", whiteSpace: "nowrap" }}>
+                            {entry.http_method ?? "—"}
+                          </td>
+                          <td
+                            style={{
+                              padding: "6px 12px",
+                              color: "#e8e8e8",
+                              maxWidth: 320,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                            title={path}
+                          >
+                            {path || "—"}
+                          </td>
+                          <td style={{ padding: "6px 12px", color: statusColor, whiteSpace: "nowrap" }}>
+                            {sc || "—"}
+                          </td>
+                          <td style={{ padding: "6px 12px", color: "#60a5fa", whiteSpace: "nowrap" }}>
+                            {entry.client_ip ?? "—"}
+                          </td>
+                          <td
+                            style={{
+                              padding: "6px 12px",
+                              color: "#555",
+                              maxWidth: 260,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                            title={ua}
+                          >
+                            {ua || "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
+              <div style={{ color: "#555", fontSize: 11 }}>
+                Page {currentPage} of {totalPages}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Btn variant="ghost" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage <= 1}>
+                  PREVIOUS 50
+                </Btn>
+                <Btn variant="ghost" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages}>
+                  NEXT 50
+                </Btn>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  );
+
   if (!activeProject?.id) {
     return (
       <div style={{ textAlign: "center", padding: 60, color: "#555" }}>
@@ -139,13 +508,15 @@ export default function OverviewPage() {
   if (!hasStats || !stats) {
     return (
       <div>
-        <SectionHeader title="Overview" subtitle="Log statistics summary" />
+        <SectionHeader title="Overview" subtitle="Operational log baseline and request behavior snapshot" />
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-          <Btn onClick={loadData} style={{ marginLeft: "auto" }}>Refresh</Btn>
+          <Btn onClick={refreshOverview} style={{ marginLeft: "auto" }}>Refresh</Btn>
         </div>
         <div style={{ textAlign: "center", padding: 60, color: "#555" }}>
           {error ?? "No log statistics are available for this project yet."}
         </div>
+        <Divider />
+        {liveSection}
       </div>
     );
   }
@@ -191,8 +562,12 @@ export default function OverviewPage() {
         <div style={{ color: "#666", fontSize: 12, letterSpacing: 0.6 }}>
           Peak hour {peakHour.hour.toString().padStart(2, "0")}:00 UTC · {peakHour.count.toLocaleString()} requests · {activeHours}/24 active hours
         </div>
-        <Btn onClick={loadData} disabled={loading} style={{ marginLeft: "auto" }}>Refresh</Btn>
+        <Btn onClick={refreshOverview} disabled={loading} style={{ marginLeft: "auto" }}>Refresh</Btn>
       </div>
+
+      {liveSection}
+
+      <Divider />
 
       {isWindowsProject && (
         <div className="section-block">

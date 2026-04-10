@@ -109,22 +109,32 @@ def get_live_monitor_snapshot(project_id: str) -> dict[str, Any]:
     with _MONITOR_GUARD:
         started_at = state["started_at"]
         last_batch_at = state["last_batch_at"]
+        has_traffic = bool(last_batch_at)
         uptime_seconds = int(now - started_at) if started_at else 0
         status = "active" if last_batch_at and (now - last_batch_at) <= 30 else "idle"
+        seconds_since_last_batch = int(now - last_batch_at) if last_batch_at else None
+        validation_errors = list(state["validation_events"][-20:])
+        processing_errors = list(state["processing_events"][-20:])
 
         return {
             "project_id": project_id,
             "status": status,
+            "has_traffic": has_traffic,
             "uptime_seconds": uptime_seconds,
             "last_batch_at": last_batch_at,
+            "seconds_since_last_batch": seconds_since_last_batch,
             "batch_count": int(state["batch_count"]),
             "total_logs": int(state["total_records"]),
             "total_size_bytes": int(state["total_bytes"]),
             "last_upload_id": state["last_upload_id"],
             "last_host": state.get("last_host"),
             "endpoint_usage": dict(state.get("endpoint_usage", {})),
-            "validation_errors": list(state["validation_events"][-20:]),
-            "processing_errors": list(state["processing_events"][-20:]),
+            "validation_errors": validation_errors,
+            "processing_errors": processing_errors,
+            "validation_error_count": len(validation_errors),
+            "processing_error_count": len(processing_errors),
+            "last_validation_error": validation_errors[-1] if validation_errors else None,
+            "last_processing_error": processing_errors[-1] if processing_errors else None,
         }
 
 

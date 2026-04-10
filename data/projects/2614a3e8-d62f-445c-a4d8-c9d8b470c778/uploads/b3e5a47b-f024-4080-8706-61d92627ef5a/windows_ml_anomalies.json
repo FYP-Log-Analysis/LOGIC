@@ -1,0 +1,49 @@
+{
+  "project_id": "2614a3e8-d62f-445c-a4d8-c9d8b470c778",
+  "upload_id": "b3e5a47b-f024-4080-8706-61d92627ef5a",
+  "window_minutes": 5,
+  "total_windows": 3,
+  "anomalous_windows": 0,
+  "windows": [
+    {
+      "event_count": 2,
+      "unique_event_ids": 2,
+      "security_events": 2,
+      "system_events": 0,
+      "powershell_events": 0,
+      "unique_computers": 1,
+      "unique_users": 2,
+      "unique_source_ips": 0,
+      "window_start": "2026-04-10T00:50:00+00:00",
+      "anomaly_score": null,
+      "is_anomalous": false
+    },
+    {
+      "event_count": 2,
+      "unique_event_ids": 2,
+      "security_events": 2,
+      "system_events": 0,
+      "powershell_events": 0,
+      "unique_computers": 1,
+      "unique_users": 2,
+      "unique_source_ips": 0,
+      "window_start": "2026-04-10T00:55:00+00:00",
+      "anomaly_score": null,
+      "is_anomalous": false
+    },
+    {
+      "event_count": 17,
+      "unique_event_ids": 4,
+      "security_events": 17,
+      "system_events": 0,
+      "powershell_events": 0,
+      "unique_computers": 1,
+      "unique_users": 3,
+      "unique_source_ips": 0,
+      "window_start": "2026-04-10T01:05:00+00:00",
+      "anomaly_score": null,
+      "is_anomalous": false
+    }
+  ],
+  "status": "ok:insufficient_baseline"
+}

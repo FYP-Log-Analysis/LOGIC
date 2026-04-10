@@ -8,9 +8,8 @@ import {
   getProjectAgentConfig,
   getProjectNxlogConfig,
   getLiveAgentMonitor,
+  sendAgentIngestTest,
   type LiveAgentMonitorData,
-  getRawLogs,
-  type RawLogEntry,
 } from "@/lib/client";
 import {
   AlertBanner,
@@ -46,18 +45,22 @@ export default function AgentsPage() {
   const [nxlogConf, setNxlogConf] = useState("");
   const [copied, setCopied] = useState<"key" | "nxlog" | null>(null);
   const [monitor, setMonitor] = useState<LiveAgentMonitorData | null>(null);
-  const [rawLogs, setRawLogs] = useState<RawLogEntry[]>([]);
-  const [logsLoading, setLogsLoading] = useState(false);
-  const [logFilter, setLogFilter] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [testRunning, setTestRunning] = useState(false);
+  const [testMessage, setTestMessage] = useState("");
+  const [testError, setTestError] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const PAGE_SIZE = 50;
 
   const selectedProject = useMemo(
     () => projects.find((p) => p.id === selectedProjectId) ?? null,
     [projects, selectedProjectId],
   );
+  const currentMode = selectedProject?.project_type ?? activeProject?.project_type ?? "web";
+  const pageTitle = currentMode === "windows" ? "Windows Agents" : "Agents";
+  const pageSubtitle =
+    currentMode === "windows"
+      ? "NXLog dashboard for Windows event collection and agent runtime monitoring"
+      : "NXLog agent operations dashboard with runtime monitoring";
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -78,38 +81,27 @@ export default function AgentsPage() {
 
   const loadProjectRuntime = useCallback(async (projectId: string, projectType?: "web" | "windows") => {
     setError("");
-    setLogsLoading(true);
     try {
       const platform = projectType === "windows" ? "windows" : undefined;
-      const logsPromise = projectType === "windows"
-        ? Promise.resolve([] as RawLogEntry[])
-        : getRawLogs({ projectId, limit: 500, liveOnly: true, excludeWindows: true });
-
+      const fallbackPaths =
+        projectType === "windows"
+          ? ["C:/Windows/System32/winevt/Logs/Security.evtx"]
+          : ["C:/inetpub/logs/LogFiles/**/*.log"];
       const nxlogPromise = getProjectNxlogConfig(projectId);
 
-      const [mon, keyData, logs, cfg, generatedNxlogConf] = await Promise.all([
+      const [mon, keyData, cfg, generatedNxlogConf] = await Promise.all([
         getLiveAgentMonitor(projectId),
         getProjectApiKey(projectId),
-        logsPromise,
         getProjectAgentConfig(projectId, platform),
         nxlogPromise,
       ]);
       setMonitor(mon);
       setApiKeys((prev) => ({ ...prev, [projectId]: keyData.api_key ?? null }));
-      setLogPaths(cfg.effective_log_paths?.length ? cfg.effective_log_paths : ["C:/inetpub/logs/LogFiles/**/*.log"]);
+      setLogPaths(cfg.effective_log_paths?.length ? cfg.effective_log_paths : fallbackPaths);
       setNxlogConf(generatedNxlogConf);
-      setRawLogs(
-        logs.filter((entry) => {
-          const serverType = String(entry.server_type ?? "").toLowerCase();
-          return !(serverType === "windows_event" || serverType.includes("windows"));
-        }),
-      );
     } catch (e) {
       setError(String(e));
-      setRawLogs([]);
       setNxlogConf("");
-    } finally {
-      setLogsLoading(false);
     }
   }, []);
 
@@ -119,14 +111,25 @@ export default function AgentsPage() {
 
   useEffect(() => {
     if (!selectedProjectId) return;
+    setTestMessage("");
+    setTestError("");
     loadProjectRuntime(selectedProjectId, selectedProject?.project_type);
 
     let cancelled = false;
-    const id = window.setInterval(async () => {
+
+    const refreshMonitor = async () => {
       try {
-        const data = await getLiveAgentMonitor(selectedProjectId);
-        if (!cancelled) setMonitor(data);
-      } catch {}
+        const monitorData = await getLiveAgentMonitor(selectedProjectId);
+
+        if (cancelled) return;
+        setMonitor(monitorData);
+      } catch {
+        // Silent refresh failure: keep last known telemetry.
+      }
+    };
+
+    const id = window.setInterval(async () => {
+      await refreshMonitor();
     }, 5000);
 
     return () => {
@@ -136,28 +139,6 @@ export default function AgentsPage() {
   }, [selectedProjectId, selectedProject?.project_type, loadProjectRuntime]);
 
   const selectedApiKey = selectedProjectId ? apiKeys[selectedProjectId] ?? null : null;
-  const filteredLogs = useMemo(() => {
-    if (!logFilter.trim()) return rawLogs;
-    const q = logFilter.toLowerCase();
-    return rawLogs.filter((l) =>
-      (l.client_ip ?? "").toLowerCase().includes(q) ||
-      (l.request_path ?? "").toLowerCase().includes(q) ||
-      (l.http_method ?? "").toLowerCase().includes(q) ||
-      String(l.status_code ?? "").includes(q) ||
-      (l.user_agent ?? "").toLowerCase().includes(q),
-    );
-  }, [rawLogs, logFilter]);
-  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE));
-  const pageStart = (currentPage - 1) * PAGE_SIZE;
-  const pagedLogs = filteredLogs.slice(pageStart, pageStart + PAGE_SIZE);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedProjectId, logFilter]);
-
-  useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
 
   const copyKey = () => {
     navigator.clipboard.writeText(selectedApiKey ?? "").then(() => {
@@ -173,11 +154,31 @@ export default function AgentsPage() {
     });
   };
 
+  const runConnectivityTest = async () => {
+    if (!selectedProjectId || !selectedApiKey) return;
+    setTestRunning(true);
+    setTestError("");
+    setTestMessage("");
+    try {
+      const result = await sendAgentIngestTest(
+        selectedProjectId,
+        selectedApiKey,
+        selectedProject?.project_type === "windows" ? "windows" : "web",
+      );
+      setTestMessage(`Test ingest accepted (upload ${result.upload_id.slice(0, 8)}..., records ${result.records_received}).`);
+      await loadProjectRuntime(selectedProjectId, selectedProject?.project_type);
+    } catch (e) {
+      setTestError(String(e));
+    } finally {
+      setTestRunning(false);
+    }
+  };
+
   if (user?.role === "admin") {
     return (
       <div style={{ maxWidth: 720 }}>
         <SectionHeader
-          title="Agents"
+          title={pageTitle}
           subtitle="Dedicated dashboard for LOGIX agent runtime configuration"
         />
         <AlertBanner type="warning" message="Agents dashboard is available for analyst accounts only." />
@@ -188,11 +189,13 @@ export default function AgentsPage() {
   return (
     <div>
       <SectionHeader
-        title="Agents"
-        subtitle="NXLog agent operations dashboard with runtime monitoring and incoming logs"
+        title={pageTitle}
+        subtitle={pageSubtitle}
       />
 
       {error && <AlertBanner type="error" message={error} />}
+      {testMessage && <AlertBanner type="success" message={testMessage} />}
+      {testError && <AlertBanner type="error" message={testError} />}
 
       {loading ? (
         <div style={{ textAlign: "center", padding: 40 }}><Spinner size={22} /></div>
@@ -270,6 +273,13 @@ export default function AgentsPage() {
               </Btn>
               <Btn
                 variant="ghost"
+                onClick={runConnectivityTest}
+                disabled={!selectedProjectId || !selectedApiKey || testRunning}
+              >
+                {testRunning ? "TESTING..." : "RUN CONNECTIVITY TEST"}
+              </Btn>
+              <Btn
+                variant="ghost"
                 onClick={() => selectedProjectId && loadProjectRuntime(selectedProjectId, selectedProject?.project_type)}
                 disabled={!selectedProjectId}
               >
@@ -311,153 +321,56 @@ export default function AgentsPage() {
 
           <Divider />
 
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-              <div style={{ fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", color: "#888" }}>
-                Incoming Raw Logs
-                {rawLogs.length > 0 && (
-                  <span style={{ color: "#444", marginLeft: 8 }}>
-                    — showing {Math.min(pageStart + PAGE_SIZE, filteredLogs.length).toLocaleString()} of {filteredLogs.length.toLocaleString()} filtered ({rawLogs.length.toLocaleString()} total)
-                  </span>
-                )}
-              </div>
-              {rawLogs.length > 0 && (
-                <input
-                  type="text"
-                  placeholder="Filter by IP, path, method, status, user-agent…"
-                  value={logFilter}
-                  onChange={(e) => setLogFilter(e.target.value)}
-                  style={{
-                    marginLeft: "auto",
-                    background: "#0d0d0d",
-                    border: "1px solid #2a2a2a",
-                    borderRadius: 4,
-                    color: "#ccc",
-                    fontSize: 11,
-                    fontFamily: "monospace",
-                    padding: "5px 10px",
-                    outline: "none",
-                    width: 320,
-                  }}
-                />
-              )}
+          <div style={{ background: "#0d0d0d", border: "1px solid #1e1e1e", borderRadius: 4, padding: 14, marginBottom: 16 }}>
+            <div style={{ fontSize: 11, color: "#666", letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>
+              Agent Telemetry
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10, marginBottom: 10 }}>
+              <MetricCard label="Last Host" value={monitor?.last_host || "—"} />
+              <MetricCard label="Batches" value={(monitor?.batch_count ?? 0).toLocaleString()} />
+              <MetricCard label="Validation Errors" value={(monitor?.validation_error_count ?? monitor?.validation_errors?.length ?? 0).toLocaleString()} accent={(monitor?.validation_error_count ?? monitor?.validation_errors?.length ?? 0) > 0 ? "#d56a6a" : "#70d08c"} />
+              <MetricCard label="Processing Errors" value={(monitor?.processing_error_count ?? monitor?.processing_errors?.length ?? 0).toLocaleString()} accent={(monitor?.processing_error_count ?? monitor?.processing_errors?.length ?? 0) > 0 ? "#d56a6a" : "#70d08c"} />
             </div>
 
-            {logsLoading ? (
-              <div style={{ textAlign: "center", padding: 24 }}><Spinner size={18} /></div>
-            ) : selectedProject?.project_type === "windows" ? (
-              <div style={{ color: "#444", fontSize: 12, border: "1px dashed #1e1e1e", borderRadius: 4, padding: 20 }}>
-                Incoming Raw Logs is available for web-agent streams only. Windows project logs are intentionally hidden here.
+            {selectedProject?.project_type === "windows" && !monitor?.has_traffic && (
+              <div style={{ color: "#888", fontSize: 12, border: "1px dashed #1e1e1e", borderRadius: 4, padding: 12, marginBottom: 10 }}>
+                No Windows agent traffic observed yet. Use "RUN CONNECTIVITY TEST" to verify project ID/API key/path wiring, then check the NXLog service status and connectivity from the Windows host.
               </div>
-            ) : rawLogs.length === 0 ? (
-              <div style={{ color: "#444", fontSize: 12, border: "1px dashed #1e1e1e", borderRadius: 4, padding: 20 }}>
-                No log entries available. Upload logs or connect the agent to populate this view.
-              </div>
-            ) : filteredLogs.length === 0 ? (
-              <div style={{ color: "#444", fontSize: 12, border: "1px dashed #1e1e1e", borderRadius: 4, padding: 20 }}>
-                No entries match the current filter.
-              </div>
-            ) : (
-              <>
-                <div style={{ overflowX: "auto", border: "1px solid #1e1e1e", borderRadius: 4 }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: "monospace" }}>
-                    <thead>
-                      <tr style={{ background: "#0d0d0d" }}>
-                        {["#", "Time", "Method", "Path", "Status", "IP", "User-Agent"].map((col) => (
-                          <th
-                            key={col}
-                            style={{
-                              textAlign: "left",
-                              padding: "8px 12px",
-                              borderBottom: "1px solid #1e1e1e",
-                              color: "#555",
-                              fontWeight: 600,
-                              letterSpacing: 0.8,
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            {col}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pagedLogs.map((entry, idx) => {
-                        const absoluteIdx = pageStart + idx;
-                        const sc = entry.status_code ?? 0;
-                        const statusColor =
-                          sc >= 500 ? "#ff4444" :
-                          sc >= 400 ? "#ff8800" :
-                          sc >= 300 ? "#f0c040" :
-                          sc >= 200 ? "#4caf50" : "#666";
-                        const path = entry.request_path ?? "";
-                        const ua = entry.user_agent ?? "";
-                        return (
-                          <tr
-                            key={`${entry.timestamp ?? ""}-${absoluteIdx}`}
-                            style={{ borderBottom: "1px solid #141414", background: idx % 2 === 0 ? "transparent" : "#0a0a0a" }}
-                          >
-                            <td style={{ padding: "6px 12px", color: "#333", minWidth: 40 }}>{absoluteIdx + 1}</td>
-                            <td style={{ padding: "6px 12px", color: "#555", whiteSpace: "nowrap" }}>
-                              {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : "—"}
-                            </td>
-                            <td style={{ padding: "6px 12px", color: "#a78bfa", whiteSpace: "nowrap" }}>
-                              {entry.http_method ?? "—"}
-                            </td>
-                            <td
-                              style={{
-                                padding: "6px 12px",
-                                color: "#e8e8e8",
-                                maxWidth: 320,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                              title={path}
-                            >
-                              {path || "—"}
-                            </td>
-                            <td style={{ padding: "6px 12px", color: statusColor, whiteSpace: "nowrap" }}>
-                              {sc || "—"}
-                            </td>
-                            <td style={{ padding: "6px 12px", color: "#60a5fa", whiteSpace: "nowrap" }}>
-                              {entry.client_ip ?? "—"}
-                            </td>
-                            <td
-                              style={{
-                                padding: "6px 12px",
-                                color: "#555",
-                                maxWidth: 260,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                              title={ua}
-                            >
-                              {ua || "—"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
-                  <div style={{ color: "#555", fontSize: 11 }}>
-                    Page {currentPage} of {totalPages}
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <Btn variant="ghost" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage <= 1}>
-                      PREVIOUS 50
-                    </Btn>
-                    <Btn variant="ghost" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages}>
-                      NEXT 50
-                    </Btn>
-                  </div>
-                </div>
-              </>
             )}
+
+            {(monitor?.validation_errors?.length ?? 0) > 0 && (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 10, color: "#aa6b6b", marginBottom: 4, letterSpacing: 0.8, textTransform: "uppercase" }}>
+                  Recent Validation Errors
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {monitor!.validation_errors.slice(-5).reverse().map((evt, idx) => (
+                    <div key={`val-${idx}-${evt.timestamp}`} style={{ color: "#cc8888", fontSize: 11, fontFamily: "monospace", background: "#120909", border: "1px solid #2a1515", borderRadius: 3, padding: "6px 8px" }}>
+                      [{new Date(evt.timestamp * 1000).toLocaleString()}] {evt.message}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {(monitor?.processing_errors?.length ?? 0) > 0 && (
+              <div>
+                <div style={{ fontSize: 10, color: "#aa6b6b", marginBottom: 4, letterSpacing: 0.8, textTransform: "uppercase" }}>
+                  Recent Processing Errors
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {monitor!.processing_errors.slice(-5).reverse().map((evt, idx) => (
+                    <div key={`proc-${idx}-${evt.timestamp}`} style={{ color: "#cc8888", fontSize: 11, fontFamily: "monospace", background: "#120909", border: "1px solid #2a1515", borderRadius: 3, padding: "6px 8px" }}>
+                      [{new Date(evt.timestamp * 1000).toLocaleString()}] {evt.message}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ color: "#555", fontSize: 12, marginBottom: 24 }}>
+            Incoming raw logs were moved to the Overview page, where live status and stream activity are now displayed together.
           </div>
         </>
       )}

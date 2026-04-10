@@ -35,15 +35,20 @@ from core.storage.sqlite_store import (
     get_project_by_api_key,
 )
 from api.deps import UserInDB, get_current_user, require_analyst
+from api.services.agent_ingest_support import (
+    build_ingest_url,
+    ingest_path_for_project_type,
+    resolve_public_ingest_base,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PROJECTS_DIR = PROJECT_ROOT / "data" / "projects"
+WINDOWS_SECURITY_EVTX_PATH = "C:/Windows/System32/winevt/Logs/Security.evtx"
 WINDOWS_DEFAULT_PATHS = [
-    "C:/inetpub/logs/LogFiles/**/*.log",
-    "C:/Windows/System32/LogFiles/Firewall/pfirewall.log",
+    WINDOWS_SECURITY_EVTX_PATH,
 ]
 UNIX_DEFAULT_PATHS = [
     "/var/log/nginx/access.log",
@@ -92,26 +97,11 @@ def _default_paths_for_platform(platform: str | None) -> list[str]:
     return UNIX_DEFAULT_PATHS
 
 
-def _resolve_public_api_base(request: Request) -> str:
-    forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",", 1)[0].strip()
-    forwarded_host = (request.headers.get("x-forwarded-host") or "").split(",", 1)[0].strip()
-
-    if forwarded_proto and forwarded_host:
-        return f"{forwarded_proto}://{forwarded_host}".rstrip("/")
-
-    return str(request.base_url).rstrip("/")
-
-
 def _render_nxlog_conf(
-    api_base_url: str,
-    project_id: str,
-    api_key: str,
+    ingest_url: str,
     file_log_paths: list[str],
     include_windows_eventlog: bool,
 ) -> str:
-    ingest_url = f"{api_base_url.rstrip('/')}/api/logicx/ingest?project_id={project_id}"
-    header_api_key = api_key.strip() if api_key.strip() else "<generate-api-key-from-projects-page>"
-
     file_inputs: list[str] = []
     file_input_names: list[str] = []
     for idx, path in enumerate(file_log_paths, start=1):
@@ -202,8 +192,6 @@ def _render_nxlog_conf(
                 "        <QueryList>",
                 "            <Query Id='0'>",
                 "                <Select Path='Security'>*</Select>",
-                "                <Select Path='System'>*</Select>",
-                "                <Select Path='Application'>*</Select>",
                 "            </Query>",
                 "        </QueryList>",
                 "    </QueryXML>",
@@ -227,7 +215,6 @@ def _render_nxlog_conf(
         f"    URL         {ingest_url}",
         "    HTTPSAllowUntrusted TRUE",
         "    ContentType application/x-ndjson",
-        f"    AddHeader   X-Logic-Api-Key {header_api_key}",
         "</Output>",
         "",
         "<Route r_logicx>",
@@ -482,14 +469,21 @@ async def get_agent_config_for_project(
     project = _assert_exists(project_id)
     _assert_access(project, current_user)
 
-    configured = get_project_agent_log_paths(project_id)
-    effective = configured if configured else _default_paths_for_platform(platform)
+    project_type = str(project.get("project_type") or "web").lower()
+    if project_type == "windows":
+        configured = [WINDOWS_SECURITY_EVTX_PATH]
+        effective = [WINDOWS_SECURITY_EVTX_PATH]
+        source = "default"
+    else:
+        configured = get_project_agent_log_paths(project_id)
+        effective = configured if configured else _default_paths_for_platform(platform)
+        source = "custom" if configured else "default"
 
     return {
         "project_id": project_id,
         "log_paths": configured,
         "effective_log_paths": effective,
-        "source": "custom" if configured else "default",
+        "source": source,
         "updated_at": project.get("agent_config_updated_at"),
     }
 
@@ -504,16 +498,18 @@ async def save_agent_config_for_project(
     project = _assert_exists(project_id)
     _assert_access(project, current_user)
 
-    cleaned = _sanitize_log_paths(req.log_paths)
+    project_type = str(project.get("project_type") or "web").lower()
+    cleaned = [WINDOWS_SECURITY_EVTX_PATH] if project_type == "windows" else _sanitize_log_paths(req.log_paths)
     set_project_agent_log_paths(project_id, cleaned)
     updated = get_project(project_id) or project
+    source = "default" if project_type == "windows" else ("custom" if cleaned else "default")
 
     logger.info("Agent config updated for project %s by user %s", project_id, current_user.username)
     return {
         "project_id": project_id,
         "log_paths": cleaned,
         "effective_log_paths": cleaned if cleaned else _default_paths_for_platform(None),
-        "source": "custom" if cleaned else "default",
+        "source": source,
         "updated_at": updated.get("agent_config_updated_at"),
     }
 
@@ -532,17 +528,23 @@ async def get_agent_runtime_config(
     if not project or project.get("id") != project_id:
         raise HTTPException(401, "Invalid API key for this project")
 
-    configured = get_project_agent_log_paths(project_id)
-    effective = configured if configured else _default_paths_for_platform(platform)
+    project_type = str(project.get("project_type") or "web").lower()
+    if project_type == "windows":
+        effective = [WINDOWS_SECURITY_EVTX_PATH]
+        source = "default"
+    else:
+        configured = get_project_agent_log_paths(project_id)
+        effective = configured if configured else _default_paths_for_platform(platform)
+        source = "custom" if configured else "default"
 
     return {
         "project_id": project_id,
         "log_paths": effective,
-        "source": "custom" if configured else "default",
+        "source": source,
         "updated_at": project.get("agent_config_updated_at"),
         "flush_interval": 2,
         "batch_size": 200,
-        "ingest_path": "/api/logicx/ingest",
+        "ingest_path": ingest_path_for_project_type(project_type),
     }
 
 
@@ -557,15 +559,24 @@ async def get_project_nxlog_conf(
     _assert_access(project, current_user)
 
     api_key = str(project.get("api_key") or "").strip()
-    configured = get_project_agent_log_paths(project_id)
     project_type = str(project.get("project_type") or "web").lower()
-    default_platform = "windows" if project_type == "windows" else None
-    effective_paths = configured if configured else _default_paths_for_platform(default_platform)
-
-    conf_text = _render_nxlog_conf(
-        api_base_url=_resolve_public_api_base(request),
+    ingest_base_url = resolve_public_ingest_base(request)
+    ingest_url = build_ingest_url(
+        base_url=ingest_base_url,
+        ingest_path=ingest_path_for_project_type(project_type),
         project_id=project_id,
         api_key=api_key,
+    )
+    if project_type == "windows":
+        # Windows NXLog is intentionally restricted to Security channel events.
+        effective_paths: list[str] = []
+    else:
+        configured = get_project_agent_log_paths(project_id)
+        default_platform = None
+        effective_paths = configured if configured else _default_paths_for_platform(default_platform)
+
+    conf_text = _render_nxlog_conf(
+        ingest_url=ingest_url,
         file_log_paths=effective_paths,
         include_windows_eventlog=project_type == "windows",
     )

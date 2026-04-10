@@ -57,9 +57,10 @@ export async function POST(
   const search = req.nextUrl.searchParams.toString();
   const targetUrl = `${API_BASE}/api/logicx/${path.join("/")}${search ? `?${search}` : ""}`;
 
+  const body = await req.arrayBuffer();
   const headers = new Headers();
   req.headers.forEach((value, key) => {
-    if (["host", "connection", "cookie"].includes(key.toLowerCase())) return;
+    if (["host", "connection", "cookie", "content-length"].includes(key.toLowerCase())) return;
     headers.set(key, value);
   });
 
@@ -68,14 +69,11 @@ export async function POST(
     upstream = await fetch(targetUrl, {
       method: "POST",
       headers,
-      body: req.body,
-      // Node 18+ fetch supports half-duplex streaming for request bodies.
-      // @ts-expect-error non-standard but supported in Node 18+
-      duplex: "half",
+      body,
     });
   } catch (err) {
     return NextResponse.json(
-      { error: `API unreachable: ${String(err)}` },
+      { error: `API unreachable at ${targetUrl}: ${String(err)}` },
       { status: 503 },
     );
   }

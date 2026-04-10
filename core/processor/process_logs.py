@@ -56,6 +56,16 @@ TIMESTAMP_FORMATS = [
     "%Y-%m-%dT%H:%M:%SZ",     # EVTX timestamps in UTC
 ]
 
+_NXLOG_WINDOWS_HINT_KEYS = {
+    "EventID",
+    "EventTime",
+    "EventReceivedTime",
+    "Channel",
+    "Hostname",
+    "RecordNumber",
+    "SourceName",
+}
+
 
 def _parse_timestamp(raw: str) -> str:
     raw = (raw or "").strip()
@@ -110,6 +120,70 @@ def _parse_evtx_event(event: dict[str, Any], source: str) -> dict | None:
     }
 
 
+def _parse_nxlog_windows_json_line(raw_line: str, source: str) -> dict | None:
+    """Parse NXLog-emitted Windows event JSON lines into EVTX-like records."""
+    line = raw_line.strip()
+    if not line or line[0] not in {"{", "["}:
+        return None
+
+    try:
+        decoded = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(decoded, dict):
+        return None
+
+    if not any(key in decoded for key in _NXLOG_WINDOWS_HINT_KEYS):
+        return None
+
+    event_id = decoded.get("EventID")
+    timestamp = decoded.get("EventTime") or decoded.get("EventReceivedTime") or decoded.get("Timestamp") or ""
+    record_id = decoded.get("RecordNumber") or decoded.get("EventRecordID")
+    level = decoded.get("Severity") or decoded.get("EventType")
+    security_user = (
+        decoded.get("SubjectUserName")
+        or decoded.get("TargetUserName")
+        or decoded.get("AccountName")
+    )
+
+    event_data = {
+        key: value
+        for key, value in decoded.items()
+        if key not in {
+            "EventID",
+            "EventTime",
+            "EventReceivedTime",
+            "Timestamp",
+            "Channel",
+            "Hostname",
+            "Computer",
+            "RecordNumber",
+            "EventRecordID",
+            "Severity",
+            "EventType",
+            "SubjectUserName",
+            "TargetUserName",
+            "AccountName",
+            "Message",
+        }
+    }
+
+    return {
+        "source": source,
+        "log_type": "evtx",
+        "timestamp": _parse_timestamp(str(timestamp)),
+        "event_id": event_id,
+        "channel": decoded.get("Channel"),
+        "computer": decoded.get("Hostname") or decoded.get("Computer"),
+        "security_user": security_user,
+        "level": level,
+        "record_id": record_id,
+        "event_data": event_data,
+        "raw": decoded.get("Message") or raw_line,
+    }
+
+
 def _parse_line(raw_line: Any, source: str, raw_event: dict | None = None) -> dict | None:
     if raw_event:
         return _parse_evtx_event(raw_event, source)
@@ -119,6 +193,10 @@ def _parse_line(raw_line: Any, source: str, raw_event: dict | None = None) -> di
 
     if not isinstance(raw_line, str):
         return None
+
+    nxlog_windows = _parse_nxlog_windows_json_line(raw_line, source)
+    if nxlog_windows is not None:
+        return nxlog_windows
 
     m = COMBINED_RE.match(raw_line)
     if m:

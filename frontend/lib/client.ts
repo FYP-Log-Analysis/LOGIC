@@ -331,18 +331,69 @@ export interface LiveAgentMonitorEvent {
 export interface LiveAgentMonitorData {
   project_id: string;
   status: "active" | "idle";
+  has_traffic?: boolean;
   uptime_seconds: number;
   last_batch_at: number | null;
+  seconds_since_last_batch?: number | null;
   batch_count: number;
   total_logs: number;
   total_size_bytes: number;
   last_upload_id: string | null;
+  last_host?: string | null;
+  endpoint_usage?: Record<string, number>;
+  validation_error_count?: number;
+  processing_error_count?: number;
+  last_validation_error?: LiveAgentMonitorEvent | null;
+  last_processing_error?: LiveAgentMonitorEvent | null;
   validation_errors: LiveAgentMonitorEvent[];
   processing_errors: LiveAgentMonitorEvent[];
 }
 
 export async function getLiveAgentMonitor(projectId: string) {
   return apiGet<LiveAgentMonitorData>(`api/receiver/monitor?project_id=${encodeURIComponent(projectId)}`);
+}
+
+export async function sendAgentIngestTest(projectId: string, apiKey: string, mode: ProjectType = "web") {
+  const targetPath = `/api/logicx/ingest?project_id=${encodeURIComponent(projectId)}`;
+  const nowIso = new Date().toISOString();
+  const payload = {
+    host: "logic-dashboard-test",
+    file: mode === "windows" ? "windows_eventlog" : "test.log",
+    log: mode === "windows"
+      ? `Windows agent connectivity test ${nowIso}`
+      : `Web agent connectivity test ${nowIso}`,
+    date: nowIso,
+    agent_version: "logic-ui-test-1.0",
+  };
+
+  const res = await fetch(targetPath, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Logic-Api-Key": apiKey,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const contentType = (res.headers.get("content-type") || "").toLowerCase();
+  const body = contentType.includes("application/json") ? await res.json() : await res.text();
+
+  if (!res.ok) {
+    const detail = typeof body === "string"
+      ? body
+      : body?.detail ?? body?.error ?? res.statusText;
+    throw new Error(detail || `Test ingest failed (${res.status})`);
+  }
+
+  return body as {
+    status: string;
+    project_id: string;
+    upload_id: string;
+    records_received: number;
+    message: string;
+    status_url: string;
+    logs_url: string;
+  };
 }
 
 // ── Raw Logs ──────────────────────────────────────────────────────────────────

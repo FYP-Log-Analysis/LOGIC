@@ -304,6 +304,12 @@ export default function ProjectsPage() {
     setTimeRange(null);
   };
 
+  const agentSetupProject = agentSetupProjectId
+    ? projects.find((project) => project.id === agentSetupProjectId)
+    : null;
+  const agentsDashboardPath =
+    agentSetupProject?.project_type === "windows" ? "/windows-agents" : "/agents";
+
   return (
     <div>
       <SectionHeader
@@ -646,7 +652,7 @@ export default function ProjectsPage() {
                     variant="ghost"
                     onClick={() => {
                       closeAgentSetup();
-                      window.location.href = "/agents";
+                      window.location.href = agentsDashboardPath;
                     }}
                     style={{ fontSize: 11 }}
                   >

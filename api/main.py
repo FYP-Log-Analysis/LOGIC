@@ -14,6 +14,7 @@ from api.routes.projects import router as projects_router
 from api.routes.admin import router as admin_router
 from api.routes.receiver import router as receiver_router
 from api.routes.logicx import router as logicx_router
+from api.routes.windows_agent import router as windows_agent_router
 from api.routes.agent_download import router as agent_download_router
 from api.routes.windows_analysis import router as windows_analysis_router
 from core.storage.sqlite_store import (
@@ -76,6 +77,7 @@ app.include_router(projects_router,     prefix="/api")
 app.include_router(admin_router,        prefix="/api/admin")
 app.include_router(receiver_router,     prefix="/api")
 app.include_router(logicx_router,       prefix="/api")
+app.include_router(windows_agent_router, prefix="/api")
 app.include_router(agent_download_router, prefix="/api")
 app.include_router(search_router,       prefix="/api")
 

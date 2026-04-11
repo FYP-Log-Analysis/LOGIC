@@ -5,7 +5,6 @@ groq
 ijson
 python-dotenv
 pyyaml
-maxminddb
 python-evtx
 numpy
 scikit-learn

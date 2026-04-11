@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   explainWindowsEvent,
+  getOverviewData,
   getLogStatistics,
   getLiveAgentMonitor,
   getRawLogs,
+  getWindowsSigmaResults,
+  getWindowsSigmaRules,
   type LiveAgentMonitorData,
   type LogStatistics,
   type RawLogEntry,
@@ -19,10 +23,10 @@ import { EventDetailModal } from "@/components/event-detail-modal";
 function heatColor(count: number, maxCount: number): string {
   if (maxCount === 0 || count === 0) return "#111";
   const ratio = count / maxCount;
-  if (ratio > 0.75) return "#7c2020";
-  if (ratio > 0.5) return "#5a3010";
-  if (ratio > 0.25) return "#3a3010";
-  return "#1a2a18";
+  if (ratio > 0.75) return "#2d2d2d";
+  if (ratio > 0.5) return "#252525";
+  if (ratio > 0.25) return "#1f1f1f";
+  return "#181818";
 }
 
 function formatUptime(totalSeconds: number): string {
@@ -91,7 +95,113 @@ function getSecurityOutcome(entry: RawLogEntry): "Success" | "Failure" | "Unknow
   return "Unknown";
 }
 
+interface MicroTileProps {
+  label: string;
+  value: string | number;
+  sub?: string;
+}
+
+function MicroTile({ label, value, sub }: MicroTileProps) {
+  return (
+    <div
+      style={{
+        border: "1px solid #1f2f23",
+        borderLeft: "2px solid #4a7c59",
+        background: "linear-gradient(180deg, #121814 0%, #101410 100%)",
+        borderRadius: 4,
+        padding: "10px 12px",
+        minHeight: 72,
+      }}
+    >
+      <div style={{ fontSize: 10, letterSpacing: 0.9, textTransform: "uppercase", color: "#6e8796", marginBottom: 8 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 22, lineHeight: 1.1, color: "#d7e2e9", fontWeight: 300 }}>
+        {typeof value === "number" ? value.toLocaleString() : value}
+      </div>
+      {sub && <div style={{ marginTop: 6, fontSize: 11, color: "#5f7380" }}>{sub}</div>}
+    </div>
+  );
+}
+
+interface WorkflowStepProps {
+  idx: number;
+  text: string;
+}
+
+function WorkflowStep({ idx, text }: WorkflowStepProps) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "20px 1fr",
+        gap: 8,
+        alignItems: "start",
+      }}
+    >
+      <div
+        style={{
+          width: 20,
+          height: 20,
+          borderRadius: 999,
+          border: "1px solid #315b8f",
+          background: "#0d1a3d",
+          color: "#7fa8bf",
+          fontSize: 10,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          lineHeight: 1,
+        }}
+      >
+        {idx}
+      </div>
+      <div style={{ fontSize: 12, color: "#d7e2e9", lineHeight: 1.45 }}>{text}</div>
+    </div>
+  );
+}
+
+interface NavActionButtonProps {
+  label: string;
+  onClick: () => void;
+}
+
+function NavActionButton({ label, onClick }: NavActionButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        border: "1px solid #315b8f",
+        background: "#0d1a3d",
+        color: "#7fa8bf",
+        borderRadius: 2,
+        fontSize: 11,
+        letterSpacing: 0.8,
+        textTransform: "uppercase",
+        padding: "8px 12px",
+        cursor: "pointer",
+        fontFamily: "inherit",
+        transition: "border-color 0.15s ease, background 0.15s ease",
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.borderColor = "#4a7c59";
+        (e.currentTarget as HTMLButtonElement).style.background = "#1a3d2a";
+        (e.currentTarget as HTMLButtonElement).style.color = "#7cb342";
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.borderColor = "#315b8f";
+        (e.currentTarget as HTMLButtonElement).style.background = "#0d1a3d";
+        (e.currentTarget as HTMLButtonElement).style.color = "#7fa8bf";
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 export default function OverviewPage() {
+  const router = useRouter();
   const [stats, setStats] = useState<LogStatistics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -105,6 +215,12 @@ export default function OverviewPage() {
   const [eventExplanation, setEventExplanation] = useState<string>("");
   const [eventExplainLoading, setEventExplainLoading] = useState(false);
   const [eventExplainError, setEventExplainError] = useState<string | null>(null);
+  const [sigmaRulesCount, setSigmaRulesCount] = useState<number | null>(null);
+  const [sigmaMatchesCount, setSigmaMatchesCount] = useState<number | null>(null);
+  const [webDetectionsCount, setWebDetectionsCount] = useState<number | null>(null);
+  const [webUniqueRulesCount, setWebUniqueRulesCount] = useState<number | null>(null);
+  const [sigmaSummaryLoading, setSigmaSummaryLoading] = useState(false);
+  const [sigmaSummaryError, setSigmaSummaryError] = useState<string | null>(null);
   const { activeProject } = useAuthStore();
   const isWindowsProject = activeProject?.project_type === "windows";
   const PAGE_SIZE = 50;
@@ -199,6 +315,87 @@ export default function OverviewPage() {
     };
   }, [activeProject?.id, loadLiveWindow]);
 
+  useEffect(() => {
+    if (!activeProject?.id) {
+      setSigmaRulesCount(null);
+      setSigmaMatchesCount(null);
+      setWebDetectionsCount(null);
+      setWebUniqueRulesCount(null);
+      setSigmaSummaryError(null);
+      setSigmaSummaryLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadDetectionSummary = async () => {
+      setSigmaSummaryLoading(true);
+      setSigmaSummaryError(null);
+      try {
+        if (isWindowsProject) {
+          setWebDetectionsCount(null);
+          setWebUniqueRulesCount(null);
+
+          const rulesCatalog = await getWindowsSigmaRules();
+          if (cancelled) return;
+
+          const ruleCount =
+            typeof rulesCatalog.count === "number"
+              ? rulesCatalog.count
+              : Array.isArray(rulesCatalog.rules)
+                ? rulesCatalog.rules.length
+                : 0;
+          setSigmaRulesCount(ruleCount);
+
+          try {
+            const matches = await getWindowsSigmaResults({ projectId: activeProject.id, limit: 1, offset: 0 });
+            if (cancelled) return;
+            const total =
+              typeof matches.total_matches === "number"
+                ? matches.total_matches
+                : typeof matches.count === "number"
+                  ? matches.count
+                  : Array.isArray(matches.matches)
+                    ? matches.matches.length
+                    : 0;
+            setSigmaMatchesCount(total);
+          } catch {
+            if (cancelled) return;
+            setSigmaMatchesCount(null);
+          }
+        } else {
+          setSigmaRulesCount(null);
+          setSigmaMatchesCount(null);
+
+          const webOverview = await getOverviewData({ projectId: activeProject.id });
+          if (cancelled) return;
+
+          setWebDetectionsCount(
+            typeof webOverview.total_detections === "number" ? webOverview.total_detections : 0,
+          );
+          setWebUniqueRulesCount(
+            typeof webOverview.unique_rules === "number" ? webOverview.unique_rules : 0,
+          );
+        }
+      } catch (e) {
+        if (cancelled) return;
+        setSigmaRulesCount(null);
+        setSigmaMatchesCount(null);
+        setWebDetectionsCount(null);
+        setWebUniqueRulesCount(null);
+        setSigmaSummaryError(e instanceof Error ? e.message : "Failed to load detection summary.");
+      } finally {
+        if (!cancelled) setSigmaSummaryLoading(false);
+      }
+    };
+
+    void loadDetectionSummary();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProject?.id, isWindowsProject]);
+
   const filteredLogs = useMemo(() => {
     if (!logFilter.trim()) return rawLogs;
     const q = logFilter.toLowerCase();
@@ -249,6 +446,148 @@ export default function OverviewPage() {
     void loadLiveWindow(false);
   }, [loadData, loadLiveWindow]);
 
+  const summaryModeText = isWindowsProject ? ".EVTX -> SIGMA" : "HTTP -> WAF RULES";
+  const summaryLeftPrimary =
+    sigmaSummaryLoading
+      ? "..."
+      : isWindowsProject
+        ? (sigmaRulesCount ?? "—").toString()
+        : (webDetectionsCount ?? "—").toString();
+
+  const summaryLeftSecondary =
+    sigmaSummaryLoading
+      ? "..."
+      : isWindowsProject
+        ? (sigmaMatchesCount ?? "—").toString()
+        : (webUniqueRulesCount ?? "—").toString();
+
+  const workflowSteps = isWindowsProject
+    ? [
+        "Ingest raw telemetry (.evtx or web logs).",
+        "Normalize records into consistent event fields.",
+        "Evaluate Sigma conditions against each event.",
+        "Store matches and queue analyst triage.",
+      ]
+    : [
+        "Ingest raw HTTP access and request logs.",
+        "Normalize request, status, and source fields.",
+        "Evaluate CRS/WAF rules against each request.",
+        "Store rule matches and queue analyst triage.",
+      ];
+
+  const detectionSummarySection = (
+    <div className="section-block">
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1.3fr) minmax(0, 1fr)",
+          gap: 14,
+        }}
+      >
+        <div
+          style={{
+            border: "1px solid #1f2f23",
+            borderRadius: 6,
+            background: "linear-gradient(180deg, #121814 0%, #0e120e 100%)",
+            padding: 12,
+          }}
+        >
+          <div style={{ fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: "#6e8796", marginBottom: 10 }}>
+            Detection Snapshot
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+            <MicroTile
+              label={isWindowsProject ? "Sigma Rules" : "Rule Matches"}
+              value={summaryLeftPrimary}
+              sub={isWindowsProject ? "Loaded rule catalog" : "CRS/WAF detections"}
+            />
+            <MicroTile
+              label={isWindowsProject ? "Rule Matches" : "Unique Rules"}
+              value={summaryLeftSecondary}
+              sub={isWindowsProject ? "Current project results" : "Triggered in current scope"}
+            />
+            <MicroTile label="Mode" value={summaryModeText} sub="Detection mapping" />
+            <MicroTile label="Project Type" value={isWindowsProject ? "WINDOWS" : "WEB"} sub="Active scope" />
+            <MicroTile label="Agent Status" value={(monitor?.status ?? "idle").toUpperCase()} sub="Live collector state" />
+            <MicroTile label="Uptime" value={formatUptime(monitor?.uptime_seconds ?? 0)} sub="Collector runtime" />
+          </div>
+        </div>
+
+        <div
+          style={{
+            border: "1px solid #1c2c3f",
+            borderRadius: 6,
+            background: "linear-gradient(180deg, #101725 0%, #0d121c 100%)",
+            padding: 12,
+          }}
+        >
+          <div style={{ fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: "#7fa8bf", marginBottom: 10 }}>
+            Detection Workflow
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {workflowSteps.map((step, idx) => (
+              <WorkflowStep key={step} idx={idx + 1} text={step} />
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+            {isWindowsProject ? (
+              <>
+                <NavActionButton label="Go To Rule Based Detection" onClick={() => router.push("/windows-analysis")} />
+                <NavActionButton label="View Sigma Rules" onClick={() => router.push("/rules-setup")} />
+                <NavActionButton label="View Anomalous Windows" onClick={() => router.push("/windows-behavioral")} />
+              </>
+            ) : (
+              <>
+                <NavActionButton label="Go To Web Analysis" onClick={() => router.push("/analysis")} />
+                <NavActionButton label="View Web Detections" onClick={() => router.push("/detections")} />
+                <NavActionButton label="View Web Behavioral" onClick={() => router.push("/behavioral")} />
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          marginTop: 10,
+          border: "1px solid #1f2f23",
+          borderRadius: 4,
+          background: "#0d1410",
+          padding: "10px 12px",
+        }}
+      >
+        <div style={{ fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: "#7fa8bf", marginBottom: 6 }}>
+          Threat Detection Guide
+        </div>
+        <div style={{ fontSize: 12, color: "#d7e2e9", lineHeight: 1.6, maxWidth: 920 }}>
+          {isWindowsProject ? (
+            <>
+              1. .evtx logs are normalized into structured events.
+              <br />
+              2. Sigma conditions are evaluated against each event.
+              <br />
+              3. Matched rules are stored as rule-based detections for analyst triage.
+            </>
+          ) : (
+            <>
+              1. Web access logs are normalized into HTTP event records.
+              <br />
+              2. CRS/WAF rules are evaluated against each request.
+              <br />
+              3. Matched web detections are stored for analyst triage.
+            </>
+          )}
+        </div>
+        {sigmaSummaryError && (
+          <div style={{ marginTop: 10, fontSize: 11, color: "#8a8a8a" }}>
+            Detection summary unavailable: {sigmaSummaryError}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   const openEventDetail = useCallback((entry: RawLogEntry) => {
     setSelectedEvent(entry);
     setEventExplanation("");
@@ -284,7 +623,7 @@ export default function OverviewPage() {
           <MetricCard
             label="Agent Status"
             value={(monitor?.status ?? "idle").toUpperCase()}
-            accent={monitor?.status === "active" ? "#70d08c" : "#c5b27b"}
+            accent={monitor?.status === "active" ? "#d4d4d4" : "#9a9a9a"}
           />
           <MetricCard
             label="Uptime"
@@ -319,7 +658,7 @@ export default function OverviewPage() {
                 borderRadius: 4,
                 color: "#ccc",
                 fontSize: 11,
-                fontFamily: "monospace",
+                fontFamily: "var(--font-mono-stack)",
                 padding: "5px 10px",
                 outline: "none",
                 width: 320,
@@ -329,7 +668,7 @@ export default function OverviewPage() {
         </div>
 
         {liveError && (
-          <div style={{ color: "#ff8a80", fontSize: 12, marginBottom: 10 }}>
+          <div style={{ color: "#b8b8b8", fontSize: 12, marginBottom: 10 }}>
             {liveError}
           </div>
         )}
@@ -348,7 +687,7 @@ export default function OverviewPage() {
           <>
             <div style={{ overflowX: "auto", border: "1px solid #1e1e1e", borderRadius: 4 }}>
               {isWindowsProject ? (
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: "monospace" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: "var(--font-mono-stack)" }}>
                   <thead>
                     <tr style={{ background: "#0d0d0d" }}>
                       {["#", "Time", "Event ID", "Channel", "Logon Type", "Status", "Computer", "User", "IP"].map((col) => (
@@ -380,8 +719,8 @@ export default function OverviewPage() {
                       const logonType = getSecurityLogonType(entry);
                       const eventStatus = getSecurityOutcome(entry);
                       const statusColor =
-                        eventStatus === "Success" ? "#70d08c" :
-                        eventStatus === "Failure" ? "#d56a6a" : "#9a9a9a";
+                        eventStatus === "Success" ? "#d8d8d8" :
+                        eventStatus === "Failure" ? "#a6a6a6" : "#7d7d7d";
                       return (
                         <tr
                           key={`${entry.timestamp ?? ""}-${absoluteIdx}`}
@@ -393,13 +732,13 @@ export default function OverviewPage() {
                           <td style={{ padding: "6px 12px", color: "#555", whiteSpace: "nowrap" }}>
                             {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : "—"}
                           </td>
-                          <td style={{ padding: "6px 12px", color: "#f0c040", whiteSpace: "nowrap" }}>
+                          <td style={{ padding: "6px 12px", color: "#c7c7c7", whiteSpace: "nowrap" }}>
                             {eventId != null ? String(eventId) : "—"}
                           </td>
-                          <td style={{ padding: "6px 12px", color: "#8fb9ff", whiteSpace: "nowrap" }}>
+                          <td style={{ padding: "6px 12px", color: "#a8a8a8", whiteSpace: "nowrap" }}>
                             {channel != null && String(channel) ? String(channel) : "—"}
                           </td>
-                          <td style={{ padding: "6px 12px", color: securityEntry ? "#d4c585" : "#444", whiteSpace: "nowrap" }}>
+                          <td style={{ padding: "6px 12px", color: securityEntry ? "#b9b9b9" : "#444", whiteSpace: "nowrap" }}>
                             {securityEntry ? logonType : "-"}
                           </td>
                           <td style={{ padding: "6px 12px", color: securityEntry ? statusColor : "#444", whiteSpace: "nowrap", fontWeight: 600 }}>
@@ -408,10 +747,10 @@ export default function OverviewPage() {
                           <td style={{ padding: "6px 12px", color: "#e8e8e8", whiteSpace: "nowrap" }}>
                             {computer != null && String(computer) ? String(computer) : "—"}
                           </td>
-                          <td style={{ padding: "6px 12px", color: "#6ecb9e", whiteSpace: "nowrap" }}>
+                          <td style={{ padding: "6px 12px", color: "#bdbdbd", whiteSpace: "nowrap" }}>
                             {authUser != null && String(authUser) ? String(authUser) : "—"}
                           </td>
-                          <td style={{ padding: "6px 12px", color: "#60a5fa", whiteSpace: "nowrap" }}>
+                          <td style={{ padding: "6px 12px", color: "#a6a6a6", whiteSpace: "nowrap" }}>
                             {entry.client_ip ?? "—"}
                           </td>
                         </tr>
@@ -420,7 +759,7 @@ export default function OverviewPage() {
                   </tbody>
                 </table>
               ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: "monospace" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: "var(--font-mono-stack)" }}>
                   <thead>
                     <tr style={{ background: "#0d0d0d" }}>
                       {["#", "Time", "Method", "Path", "Status", "IP", "User-Agent"].map((col) => (
@@ -446,10 +785,10 @@ export default function OverviewPage() {
                       const absoluteIdx = pageStart + idx;
                       const sc = entry.status_code ?? 0;
                       const statusColor =
-                        sc >= 500 ? "#ff4444" :
-                        sc >= 400 ? "#ff8800" :
-                        sc >= 300 ? "#f0c040" :
-                        sc >= 200 ? "#4caf50" : "#666";
+                        sc >= 500 ? "#9a9a9a" :
+                        sc >= 400 ? "#adadad" :
+                        sc >= 300 ? "#c0c0c0" :
+                        sc >= 200 ? "#d8d8d8" : "#666";
                       const path = entry.request_path ?? "";
                       const ua = entry.user_agent ?? "";
                       return (
@@ -461,7 +800,7 @@ export default function OverviewPage() {
                           <td style={{ padding: "6px 12px", color: "#555", whiteSpace: "nowrap" }}>
                             {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : "—"}
                           </td>
-                          <td style={{ padding: "6px 12px", color: "#a78bfa", whiteSpace: "nowrap" }}>
+                          <td style={{ padding: "6px 12px", color: "#b6b6b6", whiteSpace: "nowrap" }}>
                             {entry.http_method ?? "—"}
                           </td>
                           <td
@@ -480,7 +819,7 @@ export default function OverviewPage() {
                           <td style={{ padding: "6px 12px", color: statusColor, whiteSpace: "nowrap" }}>
                             {sc || "—"}
                           </td>
-                          <td style={{ padding: "6px 12px", color: "#60a5fa", whiteSpace: "nowrap" }}>
+                          <td style={{ padding: "6px 12px", color: "#a6a6a6", whiteSpace: "nowrap" }}>
                             {entry.client_ip ?? "—"}
                           </td>
                           <td
@@ -555,6 +894,7 @@ export default function OverviewPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
           <Btn onClick={refreshOverview} style={{ marginLeft: "auto" }}>Refresh</Btn>
         </div>
+        {detectionSummarySection}
         <div style={{ textAlign: "center", padding: 60, color: "#555" }}>
           {error ?? "No log statistics are available for this project yet."}
         </div>
@@ -580,11 +920,11 @@ export default function OverviewPage() {
   const hasTimestamps = hourCounts.some((c) => c > 0);
 
   const statusColors: Record<string, string> = {
-    "2xx": "#4caf50",
-    "3xx": "#4488ff",
-    "4xx": "#f0c040",
-    "5xx": "#ff4444",
-    other: "#555",
+    "2xx": "#d8d8d8",
+    "3xx": "#bdbdbd",
+    "4xx": "#9e9e9e",
+    "5xx": "#7f7f7f",
+    other: "#666",
   };
 
   const statusFiltered = (["2xx", "3xx", "4xx", "5xx", "other"] as const)
@@ -608,6 +948,8 @@ export default function OverviewPage() {
         <Btn onClick={refreshOverview} disabled={loading} style={{ marginLeft: "auto" }}>Refresh</Btn>
       </div>
 
+      {detectionSummarySection}
+
       {liveSection}
 
       <Divider />
@@ -622,9 +964,9 @@ export default function OverviewPage() {
         >
           <MetricCard label="Total Entries" value={total_entries.toLocaleString()} />
           {!isWindowsProject && <MetricCard label="Unique IPs" value={unique_ips.toLocaleString()} />}
-          {!isWindowsProject && <MetricCard label="Bot Requests" value={bot_count.toLocaleString()} accent="#f0c040" />}
-          {!isWindowsProject && <MetricCard label="Human Requests" value={human_count.toLocaleString()} accent="#4488ff" />}
-          {isWindowsProject && <MetricCard label="Top Path Hits" value={topPathCount.toLocaleString()} sub="Most requested endpoint volume" accent="#7cb342" />}
+          {!isWindowsProject && <MetricCard label="Bot Requests" value={bot_count.toLocaleString()} accent="#a5a5a5" />}
+          {!isWindowsProject && <MetricCard label="Human Requests" value={human_count.toLocaleString()} accent="#d0d0d0" />}
+          {isWindowsProject && <MetricCard label="Top Path Hits" value={topPathCount.toLocaleString()} sub="Most requested endpoint volume" accent="#707070" />}
         </div>
 
         {hasTimestamps && (
@@ -669,7 +1011,7 @@ export default function OverviewPage() {
               title="Bot vs Human"
               labels={["Human", "Bot"]}
               values={[human_count, bot_count]}
-              colors={["#4488ff", "#f0c040"]}
+              colors={["#cfcfcf", "#8f8f8f"]}
               height={210}
             />
           )}
@@ -721,7 +1063,7 @@ export default function OverviewPage() {
             Groq Explanation
           </div>
           {eventExplainError && (
-            <div style={{ color: "#ff8a80", fontSize: 12, marginBottom: 8 }}>
+            <div style={{ color: "#b8b8b8", fontSize: 12, marginBottom: 8 }}>
               {eventExplainError}
             </div>
           )}

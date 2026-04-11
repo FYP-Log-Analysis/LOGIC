@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -240,3 +241,101 @@ def get_windows_behavioral_results(
             return json.load(fh)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not read results: {exc}")
+
+
+def _parse_iso_utc(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
+@router.get("/windows/behavioral/window-events")
+def get_windows_behavioral_window_events(
+    project_id: Optional[str] = Query(None, description="Scope to a specific project"),
+    upload_id: Optional[str] = Query(None, description="Target a specific upload"),
+    window_start: Optional[str] = Query(None, description="Window start (ISO 8601)"),
+    start_ts: Optional[str] = Query(None, description="Backward-compatible alias for window_start"),
+    window_minutes: int = Query(5, ge=1, le=180, description="Window size in minutes"),
+    limit: int = Query(200, ge=1, le=2000, description="Max matching events returned"),
+    _user: UserInDB = Depends(get_current_user),
+):
+    """Return normalized Windows events for a selected behavioral analysis time window."""
+    import ijson
+
+    project_id = _normalize_project_id(project_id)
+    _assert_project_type(project_id, "windows")
+
+    selected_start_raw = window_start or start_ts
+    selected_start = _parse_iso_utc(selected_start_raw)
+    if not selected_start:
+        raise HTTPException(status_code=400, detail="window_start (or start_ts) must be a valid ISO 8601 timestamp.")
+
+    if not upload_id:
+        from core.storage.sqlite_store import get_uploads_for_project
+
+        uploads = get_uploads_for_project(project_id)
+        for upload in uploads:
+            if upload.get("status") == "complete":
+                upload_id = upload["upload_id"]
+                break
+
+    if not upload_id:
+        raise HTTPException(status_code=404, detail=f"No uploads found for project '{project_id}'.")
+
+    projects_dir = _PROJECT_ROOT / "data" / "projects"
+    normalized_path = projects_dir / project_id / "uploads" / upload_id / "normalized.json"
+    if not normalized_path.exists():
+        raise HTTPException(status_code=404, detail="No normalized Windows log data found for selected upload.")
+
+    selected_end = selected_start + timedelta(minutes=window_minutes)
+    sampled_events = []
+    total_events = 0
+
+    try:
+        with open(normalized_path, "rb") as fh:
+            for entry in ijson.items(fh, "item"):
+                if entry.get("server_type") != "windows_event":
+                    continue
+
+                event_ts = _parse_iso_utc(entry.get("timestamp"))
+                if not event_ts:
+                    continue
+                if not (selected_start <= event_ts < selected_end):
+                    continue
+
+                total_events += 1
+                if len(sampled_events) < limit:
+                    sampled_events.append(
+                        {
+                            "timestamp": entry.get("timestamp"),
+                            "computer": entry.get("computer"),
+                            "channel": entry.get("channel"),
+                            "event_id": entry.get("event_id"),
+                            "auth_user": entry.get("auth_user"),
+                            "client_ip": entry.get("client_ip"),
+                            "level": entry.get("level"),
+                            "message": entry.get("message"),
+                            "entry": entry,
+                        }
+                    )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to read window events for project=%s upload=%s", project_id, upload_id)
+        raise HTTPException(status_code=500, detail=f"Could not extract window events: {exc}")
+
+    return {
+        "project_id": project_id,
+        "upload_id": upload_id,
+        "window_start": selected_start.isoformat(),
+        "window_end": selected_end.isoformat(),
+        "window_minutes": window_minutes,
+        "total_events": total_events,
+        "events": sampled_events,
+    }

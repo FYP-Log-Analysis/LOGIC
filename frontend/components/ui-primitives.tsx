@@ -16,11 +16,13 @@ interface MetricCardProps {
 }
 
 export function MetricCard({ label, value, sub, accent }: MetricCardProps) {
+  const resolvedAccent = accent ?? "var(--theme-green)";
   return (
     <div
       style={{
         background: "#111",
         border: "1px solid #1e1e1e",
+        borderLeft: `2px solid ${resolvedAccent}66`,
         borderRadius: 6,
         padding: "22px 24px",
       }}
@@ -30,7 +32,7 @@ export function MetricCard({ label, value, sub, accent }: MetricCardProps) {
           fontSize: 10,
           letterSpacing: 1.2,
           textTransform: "uppercase",
-          color: "#555",
+          color: "var(--theme-muted-blue)",
           marginBottom: 10,
         }}
       >
@@ -40,14 +42,14 @@ export function MetricCard({ label, value, sub, accent }: MetricCardProps) {
         style={{
           fontSize: 30,
           fontWeight: 300,
-          color: accent ?? "#e8e8e8",
+          color: accent ?? "var(--theme-foreground-soft)",
           lineHeight: 1,
         }}
       >
         {typeof value === "number" ? value.toLocaleString() : value}
       </div>
       {sub && (
-        <div style={{ fontSize: 12, color: "#4b4b4b", marginTop: 8 }}>{sub}</div>
+        <div style={{ fontSize: 12, color: "#5e7180", marginTop: 8 }}>{sub}</div>
       )}
     </div>
   );
@@ -68,7 +70,7 @@ export function SectionHeader({ title, subtitle }: SectionHeaderProps) {
           fontSize: 24,
           fontWeight: 300,
           letterSpacing: 2,
-          color: "#e0e0e0",
+          color: "var(--theme-foreground-soft)",
           margin: 0,
         }}
       >
@@ -78,7 +80,7 @@ export function SectionHeader({ title, subtitle }: SectionHeaderProps) {
         <p
           style={{
             fontSize: 14,
-            color: "#555",
+            color: "var(--theme-muted-blue)",
             letterSpacing: 0.5,
             marginTop: 8,
             marginBottom: 0,
@@ -109,9 +111,9 @@ export function Btn({
 }: BtnProps) {
   const styles: Record<string, React.CSSProperties> = {
     default: {
-      background: "#111",
-      border: "1px solid #404040",
-      color: "#c0c0c0",
+      background: "var(--theme-green-bg)",
+      border: "1px solid var(--theme-green-border)",
+      color: "var(--theme-green)",
     },
     danger: {
       background: "#1a0a0a",
@@ -120,13 +122,13 @@ export function Btn({
     },
     ghost: {
       background: "transparent",
-      border: "1px solid #2a2a2a",
-      color: "#555",
+      border: "1px solid var(--theme-blue-border)",
+      color: "var(--theme-muted-blue)",
     },
     purple: {
-      background: "#1a0d2e",
-      border: "1px solid #6b46c1",
-      color: "#a78bfa",
+      background: "var(--theme-blue-bg)",
+      border: "1px solid var(--theme-blue-border)",
+      color: "var(--theme-blue)",
     },
   };
 
@@ -283,7 +285,7 @@ export function AlertBanner(props: AlertBannerProps) {
         borderRadius: 2,
         marginBottom: 4,
         fontSize: 12,
-        fontFamily: "monospace",
+        fontFamily: "var(--font-mono-stack)",
       }}
     >
       <span style={{ color, fontSize: 10, letterSpacing: 1 }}>[{sev}]</span>
@@ -327,8 +329,8 @@ export function Tabs({ tabs, active, onChange }: TabsProps) {
             background: "transparent",
             border: "none",
             borderBottom:
-              active === tab ? "2px solid #808080" : "2px solid transparent",
-            color: active === tab ? "#e0e0e0" : "#555",
+              active === tab ? "2px solid var(--theme-blue)" : "2px solid transparent",
+            color: active === tab ? "var(--theme-foreground-soft)" : "#5e7180",
             fontSize: 11,
             letterSpacing: 1,
             textTransform: "uppercase",
@@ -445,7 +447,7 @@ export function DataTable({ columns, rows, maxRows = 200 }: DataTableProps) {
           width: "100%",
           borderCollapse: "collapse",
           fontSize: 11,
-          fontFamily: "monospace",
+          fontFamily: "var(--font-mono-stack)",
         }}
       >
         <thead>

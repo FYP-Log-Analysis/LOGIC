@@ -119,7 +119,7 @@ export function ProcessTree({ events, onNodeClick }: ProcessTreeProps) {
           
           {/* Command Line */}
           {node.commandLine && (
-            <div style={{ fontSize: "10px", color: "#888", fontFamily: "monospace", marginLeft: "28px", marginBottom: "4px", wordBreak: "break-all" }}>
+            <div style={{ fontSize: "10px", color: "#888", fontFamily: "var(--font-mono-stack)", marginLeft: "28px", marginBottom: "4px", wordBreak: "break-all" }}>
               {node.commandLine.length > 100 ? `${node.commandLine.substring(0, 100)}...` : node.commandLine}
             </div>
           )}
@@ -192,7 +192,7 @@ export function ProcessTreePanel({ events }: ProcessTreePanelProps) {
             {selectedNode.commandLine && (
               <div style={{ marginTop: "8px" }}>
                 <div style={{ color: "#666", marginBottom: "4px" }}>Command Line:</div>
-                <div style={{ fontFamily: "monospace", fontSize: "10px", color: "#aaa", background: "#000", padding: "8px", borderRadius: "4px", wordBreak: "break-all" }}>
+                <div style={{ fontFamily: "var(--font-mono-stack)", fontSize: "10px", color: "#aaa", background: "#000", padding: "8px", borderRadius: "4px", wordBreak: "break-all" }}>
                   {selectedNode.commandLine}
                 </div>
               </div>

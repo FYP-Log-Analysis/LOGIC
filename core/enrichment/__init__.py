@@ -1,1 +1,1 @@
-"""Geo and other enrichment helpers."""
+"""Enrichment helpers."""

@@ -104,6 +104,7 @@ const panelTitleStyle = {
 export default function ThreatActorPage() {
   const [allMatches, setAllMatches] = useState<RuleMatch[]>([]);
   const [behResults, setBehResults] = useState<BehResult>({});
+  const [loadWarning, setLoadWarning] = useState<string | null>(null);
   const [knownIps, setKnownIps] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIp, setSelectedIp] = useState<string | null>(null);
@@ -115,17 +116,43 @@ export default function ThreatActorPage() {
   const { activeProject, timeRange } = useAuthStore();
   const scope = { projectId: activeProject?.id, startTs: timeRange?.from, endTs: timeRange?.to };
 
-  const loadData = useCallback(() => {
-    if (!activeProject?.id) { setLoading(false); return; }
-    setLoading(true);
-    Promise.all([getRuleMatches(scope), getBehavioralResults({ projectId: scope.projectId })]).then(([rm, beh]) => {
-      const matches = rm.matches as RuleMatch[];
-      setAllMatches(matches);
-      setBehResults(beh as BehResult);
-      const ips = [...new Set(matches.map((m) => m.client_ip).filter(Boolean))] as string[];
-      setKnownIps(ips.sort());
+  const loadData = useCallback(async () => {
+    if (!activeProject?.id) {
       setLoading(false);
-    });
+      setLoadWarning(null);
+      return;
+    }
+
+    setLoading(true);
+    setLoadWarning(null);
+
+    const [ruleResult, behavioralResult] = await Promise.allSettled([
+      getRuleMatches(scope),
+      getBehavioralResults({ projectId: scope.projectId }),
+    ]);
+
+    if (ruleResult.status !== "fulfilled") {
+      setAllMatches([]);
+      setKnownIps([]);
+      setBehResults({});
+      setLoading(false);
+      setLoadWarning("Unable to load rule matches for threat actor profiling.");
+      return;
+    }
+
+    const matches = ruleResult.value.matches as RuleMatch[];
+    setAllMatches(matches);
+
+    if (behavioralResult.status === "fulfilled") {
+      setBehResults(behavioralResult.value as BehResult);
+    } else {
+      setBehResults({});
+      setLoadWarning("Behavioral results not available yet. Profile is shown using rule matches only.");
+    }
+
+    const ips = [...new Set(matches.map((m) => m.client_ip).filter(Boolean))] as string[];
+    setKnownIps(ips.sort());
+    setLoading(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProject?.id, timeRange?.from, timeRange?.to]);
 
@@ -261,6 +288,12 @@ export default function ThreatActorPage() {
           <Btn variant="ghost" onClick={() => loadData()}>Refresh</Btn>
         </div>
       </div>
+
+      {loadWarning && (
+        <div style={{ marginBottom: 16, border: "1px solid #2a2a2a", borderRadius: 4, padding: "8px 12px", color: "#8a8a8a", fontSize: 11 }}>
+          {loadWarning}
+        </div>
+      )}
 
       {/* IP Selection */}
       <div style={{ ...panelStyle, marginBottom: 24 }}>
@@ -437,7 +470,7 @@ export default function ThreatActorPage() {
                       <tbody>
                         {ruleFreq.slice(0, 15).map(([id, d]) => (
                           <tr key={id} style={{ borderBottom: "1px solid #1a1a1a" }}>
-                            <td style={{ padding: "6px 8px", color: "#c0c0c0", fontFamily: "monospace" }}>{id}</td>
+                            <td style={{ padding: "6px 8px", color: "#c0c0c0", fontFamily: "var(--font-mono-stack)" }}>{id}</td>
                             <td style={{ padding: "6px 8px", color: "#999", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.title}>{d.title ?? "—"}</td>
                             <td style={{ padding: "6px 8px" }}><StatusBadge status={d.sev ?? "LOW"} /></td>
                             <td style={{ padding: "6px 8px", color: "#d0d0d0", textAlign: "right", fontWeight: 700 }}>{d.count}</td>
@@ -502,7 +535,7 @@ export default function ThreatActorPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {ipProfile!.user_agents.slice(0, 8).map((ua, i) => (
                   <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: 4, padding: "6px 12px", fontSize: 11 }}>
-                    <span style={{ color: "#999", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "85%" }} title={ua.user_agent}>
+                    <span style={{ color: "#999", fontFamily: "var(--font-mono-stack)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "85%" }} title={ua.user_agent}>
                       {ua.user_agent || "(empty)"}
                     </span>
                     <span style={{ color: "#c0c0c0", fontWeight: 700, marginLeft: 8 }}>{ua.count}</span>

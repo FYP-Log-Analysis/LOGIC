@@ -14,7 +14,6 @@ import ijson
 
 from core.processor.apache_norm import normalise_access_entry, normalise_nginx_error
 from core.processor.evtx_norm import normalise_windows_event
-from core.storage.sqlite_store import upsert_ip_geo
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -115,6 +114,7 @@ def _parse_evtx_event(event: dict[str, Any], source: str) -> dict | None:
         "security_user": event.get("security_user"),
         "level": event.get("level"),
         "record_id": event.get("record_id"),
+        "message": event.get("message"),
         "event_data": event.get("event_data") or {},
         "raw": event.get("raw") or json.dumps(event, ensure_ascii=False),
     }
@@ -179,6 +179,7 @@ def _parse_nxlog_windows_json_line(raw_line: str, source: str) -> dict | None:
         "security_user": security_user,
         "level": level,
         "record_id": record_id,
+        "message": decoded.get("Message"),
         "event_data": event_data,
         "raw": decoded.get("Message") or raw_line,
     }
@@ -305,7 +306,6 @@ def process_all(
     _min_ts: str | None  = None
     _max_ts: str | None  = None
 
-    _geo_batch: set[str] = set()
     _seen_ips:  set[str] = set()
 
     with open(src, "rb") as fin, open(out_path, "w", encoding="utf-8") as fout:
@@ -375,7 +375,6 @@ def process_all(
             if ip and not is_windows_event:
                 if ip not in _seen_ips:
                     _seen_ips.add(ip)
-                    _geo_batch.add(ip)
                 # Per-IP summary
                 s = _ip_sum.get(ip)
                 if s is None:
@@ -402,13 +401,6 @@ def process_all(
             if written % _LOG_EVERY == 0:
                 logger.info(f"  … {written:,} entries processed")
         fout.write("\n]")
-
-    # ── Flush GeoIP lookups ─────────────────────────────────────────────────
-    if _geo_batch:
-        try:
-            upsert_ip_geo(list(_geo_batch))
-        except Exception as exc:
-            logger.warning(f"GeoIP batch upsert skipped: {exc}")
 
     # ── Write aggregations to JSON files ───────────────────────────────────
     try:

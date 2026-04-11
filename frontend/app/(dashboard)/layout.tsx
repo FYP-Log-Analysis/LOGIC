@@ -206,6 +206,7 @@ export default function DashboardLayout({
   const { user, setUser, hydrated, setHydrated, activeProject, timeRange } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
     if (hydrated) return;
@@ -246,7 +247,7 @@ export default function DashboardLayout({
           height: "100vh",
           background: "#080808",
           color: "#555",
-          fontFamily: "monospace",
+          fontFamily: "var(--font-mono-stack)",
           fontSize: 12,
           letterSpacing: 2,
         }}
@@ -257,8 +258,41 @@ export default function DashboardLayout({
   }
 
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-      <Sidebar />
+    <div style={{ display: "flex", height: "100vh", overflow: "hidden", position: "relative" }}>
+      {sidebarOpen && <Sidebar onHide={() => setSidebarOpen(false)} />}
+      {!sidebarOpen && (
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(true)}
+          aria-label="Open sidebar"
+          style={{
+            position: "absolute",
+            top: 12,
+            left: 12,
+            zIndex: 20,
+            border: "1px solid #2a2a2a",
+            background: "#111",
+            color: "#c0c0c0",
+            borderRadius: 2,
+            padding: "6px 10px",
+            fontSize: 10,
+            letterSpacing: 1,
+            textTransform: "uppercase",
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+          onMouseEnter={(e) => {
+            (e.target as HTMLButtonElement).style.borderColor = "#4a4a4a";
+            (e.target as HTMLButtonElement).style.color = "#fff";
+          }}
+          onMouseLeave={(e) => {
+            (e.target as HTMLButtonElement).style.borderColor = "#2a2a2a";
+            (e.target as HTMLButtonElement).style.color = "#c0c0c0";
+          }}
+        >
+          Open
+        </button>
+      )}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <TimeFilterBar />
         <main

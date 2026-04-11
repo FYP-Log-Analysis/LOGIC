@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { runWindowsBehavioralAnalysis, getWindowsBehavioralResults } from "@/lib/client";
+import {
+  runWindowsBehavioralAnalysis,
+  getWindowsBehavioralResults,
+  getWindowsBehavioralWindowEvents,
+} from "@/lib/client";
 import { useAuthStore } from "@/lib/store";
 import LineChart from "@/components/charts/line-chart";
 import {
@@ -40,8 +44,15 @@ interface WindowsBehavioralResult {
   status: string;
 }
 
+type DetailBlockKey =
+  | "timeline"
+  | "allWindows"
+  | "anomalousWindows"
+  | "selectedWindow";
+
 export default function WindowsBehavioralPage() {
   const { activeProject } = useAuthStore();
+  const isCompact = true;
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<WindowsBehavioralResult | null>(null);
@@ -49,6 +60,49 @@ export default function WindowsBehavioralPage() {
   const [windowMinutes, setWindowMinutes] = useState(5);
   const [startTs, setStartTs] = useState("");
   const [endTs, setEndTs] = useState("");
+  const [selectedWindowStart, setSelectedWindowStart] = useState<string | null>(null);
+  const [selectedWindowEvents, setSelectedWindowEvents] = useState<Array<Record<string, unknown>>>([]);
+  const [selectedWindowTotal, setSelectedWindowTotal] = useState(0);
+  const [selectedWindowLoading, setSelectedWindowLoading] = useState(false);
+  const [selectedWindowError, setSelectedWindowError] = useState("");
+  const [expandedDetails, setExpandedDetails] = useState<Record<DetailBlockKey, boolean>>({
+    timeline: false,
+    allWindows: false,
+    anomalousWindows: false,
+    selectedWindow: false,
+  });
+
+  const detailsBoxStyle: React.CSSProperties = {
+    marginBottom: 10,
+    padding: "8px 10px",
+    background: "#10151a",
+    border: "1px solid #233241",
+    borderRadius: 4,
+    color: "#9ab7d3",
+    fontSize: 11,
+    lineHeight: 1.55,
+  };
+
+  const renderDetailsButton = (key: DetailBlockKey, label: string) => (
+    <button
+      type="button"
+      onClick={() => setExpandedDetails((prev) => ({ ...prev, [key]: !prev[key] }))}
+      aria-label={`Toggle details for ${label}`}
+      style={{
+        border: "1px solid #2a3948",
+        background: expandedDetails[key] ? "#1f3346" : "#11161b",
+        color: expandedDetails[key] ? "#d6e7f8" : "#9bb5cc",
+        borderRadius: 3,
+        padding: "4px 8px",
+        fontSize: 10,
+        letterSpacing: 0.4,
+        textTransform: "uppercase",
+        cursor: "pointer",
+      }}
+    >
+      {expandedDetails[key] ? "Hide Details" : "Details"}
+    </button>
+  );
 
   const toIsoOrUndefined = (value: string): string | undefined => {
     if (!value) return undefined;
@@ -78,6 +132,52 @@ export default function WindowsBehavioralPage() {
     }
     loadLatest(activeProject.id);
   }, [activeProject?.id, loadLatest]);
+
+  useEffect(() => {
+    const windows = result?.windows || [];
+    if (windows.length === 0) {
+      setSelectedWindowStart(null);
+      return;
+    }
+    setSelectedWindowStart((prev) => {
+      if (prev && windows.some((w) => w.window_start === prev)) return prev;
+      return windows[0].window_start;
+    });
+  }, [result?.windows]);
+
+  useEffect(() => {
+    if (!activeProject?.id || !result || !selectedWindowStart) return;
+
+    let cancelled = false;
+    setSelectedWindowLoading(true);
+    setSelectedWindowError("");
+
+    getWindowsBehavioralWindowEvents({
+      projectId: activeProject.id,
+      uploadId: result.upload_id,
+      windowStart: selectedWindowStart,
+      windowMinutes: result.window_minutes,
+      limit: 250,
+    })
+      .then((payload) => {
+        if (cancelled) return;
+        setSelectedWindowEvents((payload.events ?? []) as Array<Record<string, unknown>>);
+        setSelectedWindowTotal(payload.total_events ?? 0);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setSelectedWindowEvents([]);
+        setSelectedWindowTotal(0);
+        setSelectedWindowError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setSelectedWindowLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProject?.id, result?.upload_id, result?.window_minutes, selectedWindowStart]);
 
   const handleRun = async () => {
     setRunning(true);
@@ -117,8 +217,9 @@ export default function WindowsBehavioralPage() {
     );
   }
 
-  const anomalousWindows = (result?.windows || []).filter((w) => w.is_anomalous);
-  const timelineWindows = (result?.windows || []).filter((w) => w.anomaly_score !== null);
+  const allWindows = result?.windows || [];
+  const anomalousWindows = allWindows.filter((w) => w.is_anomalous);
+  const timelineWindows = allWindows.filter((w) => w.anomaly_score !== null);
   const timelineLabels = timelineWindows.map((w) => new Date(w.window_start).toLocaleTimeString());
   const timelineDatasets = [
     {
@@ -135,28 +236,43 @@ export default function WindowsBehavioralPage() {
     },
   ];
 
-  const topAnomalousComputers = (() => {
-    const computerCounts = new Map<string, number>();
-    anomalousWindows.forEach((w) => {
-      const count = computerCounts.get(w.window_start) || 0;
-      computerCounts.set(w.window_start, count + w.unique_computers);
-    });
-    return Array.from(computerCounts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
-  })();
-
   const avgAnomalyScore = anomalousWindows.length > 0
     ? (anomalousWindows.reduce((sum, w) => sum + (w.anomaly_score || 0), 0) / anomalousWindows.length * 100).toFixed(1)
     : "0.0";
 
-  const tableData = anomalousWindows.slice(0, 20).map((w) => ({
+  const allWindowsTableData = allWindows.map((w) => ({
     time: new Date(w.window_start).toLocaleString(),
     events: w.event_count.toLocaleString(),
     computers: w.unique_computers,
     users: w.unique_users,
     ips: w.unique_source_ips,
-    score: w.anomaly_score ? `${(w.anomaly_score * 100).toFixed(1)}%` : "N/A",
+    score: w.anomaly_score !== null ? `${(w.anomaly_score * 100).toFixed(1)}%` : "N/A",
+    anomaly: w.is_anomalous ? "YES" : "NO",
+  }));
+
+  const anomalousTableData = anomalousWindows.slice(0, 50).map((w) => ({
+    time: new Date(w.window_start).toLocaleString(),
+    events: w.event_count.toLocaleString(),
+    computers: w.unique_computers,
+    users: w.unique_users,
+    ips: w.unique_source_ips,
+    score: w.anomaly_score !== null ? `${(w.anomaly_score * 100).toFixed(1)}%` : "N/A",
+  }));
+
+  const selectedWindow = selectedWindowStart
+    ? allWindows.find((w) => w.window_start === selectedWindowStart) || null
+    : null;
+  const selectedWindowRowIndex = selectedWindowStart
+    ? allWindows.findIndex((w) => w.window_start === selectedWindowStart)
+    : -1;
+
+  const selectedWindowEventsTable = selectedWindowEvents.map((evt) => ({
+    timestamp: evt.timestamp ? new Date(String(evt.timestamp)).toLocaleString() : "—",
+    event_id: evt.event_id ?? "—",
+    channel: evt.channel ?? "—",
+    computer: evt.computer ?? "—",
+    user: evt.auth_user ?? "—",
+    ip: evt.client_ip ?? "—",
   }));
 
   return (
@@ -165,9 +281,11 @@ export default function WindowsBehavioralPage() {
         title="Anomalous Windows"
         subtitle={`${activeProject?.name} — ML-based (Isolation Forest) anomaly detection for Windows events`}
         actions={
-          <WindowsButton onClick={() => loadLatest(activeProject.id)} disabled={loading || running}>
-            {loading ? "LOADING..." : "REFRESH"}
-          </WindowsButton>
+          <div style={{ display: "flex", gap: 10 }}>
+            <WindowsButton onClick={() => loadLatest(activeProject.id)} disabled={loading || running}>
+              {loading ? "LOADING..." : "REFRESH"}
+            </WindowsButton>
+          </div>
         }
       />
 
@@ -180,7 +298,7 @@ export default function WindowsBehavioralPage() {
           max={60}
           value={windowMinutes}
           onChange={(e) => setWindowMinutes(Math.max(1, Math.min(60, Number(e.target.value) || 5)))}
-          style={{ width: "100px" }}
+          style={{ width: isCompact ? "86px" : "100px" }}
         />
         <FilterInput
           label="From"
@@ -210,33 +328,25 @@ export default function WindowsBehavioralPage() {
       {/* Results */}
       {!loading && result && (
         <>
-          {/* Summary Metrics */}
-          <WindowsStatGrid columns={4}>
-            <WindowsMetricCard
-              label="Total Windows"
-              value={(result.total_windows ?? 0).toLocaleString()}
-            />
-            <WindowsMetricCard
-              label="Anomalous Windows"
-              value={(result.anomalous_windows ?? 0).toLocaleString()}
-              sublabel={`${result.total_windows > 0 ? ((result.anomalous_windows / result.total_windows) * 100).toFixed(1) : 0}% of total`}
-            />
-            <WindowsMetricCard
-              label="Window Size"
-              value={`${result.window_minutes} min`}
-            />
-            <WindowsMetricCard
-              label="Avg Anomaly Score"
-              value={`${avgAnomalyScore}%`}
-            />
-          </WindowsStatGrid>
+          <div style={{ marginBottom: 10, color: "#8a8a8a", fontSize: 11 }}>
+            Windows {result.total_windows.toLocaleString()} • Anomalous {result.anomalous_windows.toLocaleString()} • Window {result.window_minutes} min • Avg {avgAnomalyScore}%
+          </div>
 
           <WindowsDivider />
 
           {/* Anomaly Timeline Chart */}
           {timelineLabels.length > 0 && (
-            <WindowsDataPanel title="Anomaly Score Timeline" accent="#ff8800">
-              <div style={{ background: "#0a0a0a", borderRadius: 4, padding: 16 }}>
+            <WindowsDataPanel
+              title="Anomaly Score Timeline"
+              accent="#6f6f6f"
+              actions={renderDetailsButton("timeline", "Anomaly Score Timeline")}
+            >
+              {expandedDetails.timeline && (
+                <div style={detailsBoxStyle}>
+                  Orange line shows anomaly score trend, blue line shows event volume per time window. When score drops while event count jumps, that window is a priority for investigation.
+                </div>
+              )}
+              <div style={{ background: "#0a0a0a", borderRadius: 4, padding: isCompact ? 8 : 16 }}>
                 <LineChart
                   labels={timelineLabels}
                   datasets={timelineDatasets}
@@ -248,9 +358,51 @@ export default function WindowsBehavioralPage() {
 
           {timelineLabels.length > 0 && <WindowsDivider />}
 
+          <WindowsDataPanel
+            title="All Time Windows (Select To Inspect)"
+            actions={renderDetailsButton("allWindows", "All Time Windows")}
+          >
+            {expandedDetails.allWindows && (
+              <div style={detailsBoxStyle}>
+                Every row is one analysis window. Click any row to load the exact raw events for that period in the Selected Window block below.
+              </div>
+            )}
+            <div style={{ fontSize: "11px", color: "#888", marginBottom: "8px" }}>
+              Click a window row to view the exact events inside that time window.
+            </div>
+            <WindowsEventTable
+              columns={[
+                { key: "time", label: "Time Window", width: "24%" },
+                { key: "events", label: "Events", width: "11%" },
+                { key: "computers", label: "Computers", width: "11%" },
+                { key: "users", label: "Users", width: "11%" },
+                { key: "ips", label: "IPs", width: "11%" },
+                { key: "score", label: "Anomaly Score", width: "14%" },
+                { key: "anomaly", label: "Anomalous", width: "10%" },
+              ]}
+              data={allWindowsTableData}
+              onRowClick={(_, idx) => setSelectedWindowStart(allWindows[idx]?.window_start ?? null)}
+              selectedRowIndex={selectedWindowRowIndex}
+              emptyMessage="No time windows available"
+              density={isCompact ? "compact" : "comfortable"}
+              maxHeight={isCompact ? 360 : undefined}
+            />
+          </WindowsDataPanel>
+
+          <WindowsDivider />
+
           {/* Anomalous Windows Table */}
           {anomalousWindows.length > 0 ? (
-            <WindowsDataPanel title="Anomalous Time Windows" accent="#ff8800">
+            <WindowsDataPanel
+              title="Anomalous Time Windows"
+              accent="#ff8800"
+              actions={renderDetailsButton("anomalousWindows", "Anomalous Time Windows")}
+            >
+              {expandedDetails.anomalousWindows && (
+                <div style={detailsBoxStyle}>
+                  This is a filtered view of only flagged windows (highest risk first in your workflow). Use it to jump quickly to suspicious periods without scanning the full table.
+                </div>
+              )}
               <WindowsEventTable
                 columns={[
                   { key: "time", label: "Time Window", width: "25%" },
@@ -260,8 +412,11 @@ export default function WindowsBehavioralPage() {
                   { key: "ips", label: "IPs", width: "12%" },
                   { key: "score", label: "Anomaly Score", width: "15%" },
                 ]}
-                data={tableData}
+                data={anomalousTableData}
+                onRowClick={(_, idx) => setSelectedWindowStart(anomalousWindows[idx]?.window_start ?? null)}
                 emptyMessage="No anomalous windows detected"
+                density={isCompact ? "compact" : "comfortable"}
+                maxHeight={isCompact ? 320 : undefined}
               />
             </WindowsDataPanel>
           ) : (
@@ -269,6 +424,66 @@ export default function WindowsBehavioralPage() {
               title="No Anomalies Detected"
               message="All time windows appear to have normal behavioral patterns"
             />
+          )}
+
+          {selectedWindow && (
+            <>
+              <WindowsDivider />
+              <WindowsDataPanel
+                title={`Selected Window: ${new Date(selectedWindow.window_start).toLocaleString()}`}
+                accent="#4488ff"
+                actions={renderDetailsButton("selectedWindow", "Selected Window")}
+              >
+                {expandedDetails.selectedWindow && (
+                  <div style={detailsBoxStyle}>
+                    This block is the drill-down view for one chosen window. Top metrics summarize that window, and the table lists sampled raw events so you can validate why the model flagged it.
+                  </div>
+                )}
+                <WindowsStatGrid columns={4}>
+                  <WindowsMetricCard label="Events In Window" value={selectedWindow.event_count.toLocaleString()} />
+                  <WindowsMetricCard label="Unique Event IDs" value={selectedWindow.unique_event_ids.toLocaleString()} />
+                  <WindowsMetricCard
+                    label="Anomaly Score"
+                    value={selectedWindow.anomaly_score !== null ? `${(selectedWindow.anomaly_score * 100).toFixed(1)}%` : "N/A"}
+                    sublabel={selectedWindow.anomaly_score !== null && selectedWindow.anomaly_score < 0 ? "Below zero: anomalous tendency" : "Near/above zero: normal tendency"}
+                  />
+                  <WindowsMetricCard
+                    label="Anomaly Flag"
+                    value={selectedWindow.is_anomalous ? "YES" : "NO"}
+                  />
+                </WindowsStatGrid>
+
+                {selectedWindowError && (
+                  <div style={{ padding: "12px", background: "#3d1a1a", border: "1px solid #8b3d3d", borderRadius: "4px", color: "#ff6b6b", fontSize: "11px" }}>
+                    {selectedWindowError}
+                  </div>
+                )}
+
+                {selectedWindowLoading ? (
+                  <WindowsLoadingSkeleton count={2} height={60} />
+                ) : (
+                  <>
+                    <div style={{ fontSize: "11px", color: "#888", marginBottom: "6px" }}>
+                      Showing {selectedWindowEventsTable.length.toLocaleString()} of {selectedWindowTotal.toLocaleString()} events in this window.
+                    </div>
+                    <WindowsEventTable
+                      columns={[
+                        { key: "timestamp", label: "Timestamp", width: "22%" },
+                        { key: "event_id", label: "Event ID", width: "10%" },
+                        { key: "channel", label: "Channel", width: "20%" },
+                        { key: "computer", label: "Computer", width: "16%" },
+                        { key: "user", label: "User", width: "16%" },
+                        { key: "ip", label: "Source IP", width: "16%" },
+                      ]}
+                      data={selectedWindowEventsTable}
+                      emptyMessage="No events found for selected time window"
+                      density="compact"
+                      maxHeight={isCompact ? 360 : undefined}
+                    />
+                  </>
+                )}
+              </WindowsDataPanel>
+            </>
           )}
 
           {/* Status Info */}

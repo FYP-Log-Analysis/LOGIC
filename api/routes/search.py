@@ -6,7 +6,6 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from api.routes.projects import _normalize_project_id
 from core.storage.sqlite_store import (
-    get_geo_summary,
     get_stats,
     get_ip_summary,
     query_detections,
@@ -67,16 +66,6 @@ def get_summary_stats(
 ) -> dict[str, Any]:
     _assert_project_type(project_id, "web")
     return get_stats(project_id=project_id)
-
-
-@router.get("/geography/summary")
-def get_geography_summary(
-    limit:      int        = Query(10, ge=1, le=50),
-    project_id: str | None = Query(None, description="Scope to a specific project"),
-    _user:      UserInDB   = Depends(get_current_user),
-) -> dict[str, Any]:
-    _assert_project_type(project_id, "web")
-    return get_geo_summary(limit=limit, project_id=project_id)
 
 
 @router.get("/ip-summary/{client_ip}")

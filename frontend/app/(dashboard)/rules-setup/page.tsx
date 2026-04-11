@@ -119,7 +119,7 @@ export default function RulesSetupPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {rulesByFolder.map((group) => (
             <div key={group.folder} style={{ border: "1px solid #1f1f1f", borderRadius: 4, background: "#090909", padding: 10 }}>
-              <div style={{ color: "#7cb342", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 8, fontFamily: "monospace" }}>
+              <div style={{ color: "#7cb342", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 8, fontFamily: "var(--font-mono-stack)" }}>
                 data/sigma_rules/{group.folder === "(root)" ? "" : group.folder} · {group.rules.length} file{group.rules.length === 1 ? "" : "s"}
               </div>
 
@@ -138,10 +138,10 @@ export default function RulesSetupPage() {
                     }}
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ color: "#d0d0d0", fontSize: "12px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontFamily: "monospace" }}>
+                      <div style={{ color: "#d0d0d0", fontSize: "12px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontFamily: "var(--font-mono-stack)" }}>
                         {rule.rule_path.split("/").pop() || rule.rule_path}
                       </div>
-                      <div style={{ color: "#707070", fontSize: "11px", marginTop: "3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontFamily: "monospace" }}>
+                      <div style={{ color: "#707070", fontSize: "11px", marginTop: "3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontFamily: "var(--font-mono-stack)" }}>
                         {rule.rule_path}
                       </div>
                       <div style={{ color: "#707070", fontSize: "11px", marginTop: "2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>

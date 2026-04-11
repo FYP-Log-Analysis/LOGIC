@@ -1,5 +1,5 @@
-# SQLite store for pipeline run history, upload status, user/project management,
-# and GeoIP lookup cache. Detection results and behavioral aggregations live in
+# SQLite store for pipeline run history, upload status, and user/project management.
+# Detection results and behavioral aggregations live in
 # per-upload JSON files (rule_matches.json, ip_summary.json, etc.).
 # Database lives at data/logic.db
 import json
@@ -68,17 +68,6 @@ def init_db() -> None:
                 started_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
                 updated_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
             );
-
-            CREATE TABLE IF NOT EXISTS ip_geo (
-                client_ip              TEXT PRIMARY KEY,
-                country_code           TEXT,
-                country_name           TEXT,
-                is_private_or_unknown  INTEGER DEFAULT 0,
-                lookup_source          TEXT,
-                updated_at             TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_ip_geo_country_code ON ip_geo(country_code);
 
             -- ── AUTH: users ─────────────────────────────────────────────────
             CREATE TABLE IF NOT EXISTS users (
@@ -466,198 +455,6 @@ def query_detections(
     return matches[offset : offset + limit], len(matches)
 
 
-def _insert_ip_geo_rows(conn: sqlite3.Connection, rows: list[tuple]) -> None:
-    conn.executemany(
-        """
-        INSERT INTO ip_geo
-            (client_ip, country_code, country_name, is_private_or_unknown, lookup_source, updated_at)
-        VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
-        ON CONFLICT(client_ip) DO UPDATE SET
-            country_code = excluded.country_code,
-            country_name = excluded.country_name,
-            is_private_or_unknown = excluded.is_private_or_unknown,
-            lookup_source = excluded.lookup_source,
-            updated_at = excluded.updated_at
-        """,
-        rows,
-    )
-
-
-def upsert_ip_geo(client_ips: list[str]) -> int:
-    if not client_ips:
-        return 0
-
-    from core.enrichment.geoip import lookup_ip_country
-
-    unique_ips = sorted({ip.strip() for ip in client_ips if ip and ip.strip()})
-    if not unique_ips:
-        return 0
-
-    placeholders = ",".join(["?"] * len(unique_ips))
-    with _get_conn() as conn:
-        existing = {
-            row[0]
-            for row in conn.execute(
-                f"SELECT client_ip FROM ip_geo WHERE client_ip IN ({placeholders})",
-                unique_ips,
-            ).fetchall()
-        }
-        missing = [ip for ip in unique_ips if ip not in existing]
-        if not missing:
-            return 0
-
-        rows = []
-        for client_ip in missing:
-            geo = lookup_ip_country(client_ip)
-            rows.append(
-                (
-                    client_ip,
-                    geo.get("country_code"),
-                    geo.get("country_name"),
-                    1 if geo.get("is_private_or_unknown") else 0,
-                    geo.get("lookup_source"),
-                )
-            )
-        _insert_ip_geo_rows(conn, rows)
-    logger.info("Upserted %d GeoIP records", len(rows))
-    return len(rows)
-
-
-def ensure_ip_geo(client_ip: str | None) -> dict | None:
-    if not client_ip:
-        return None
-
-    with _get_conn() as conn:
-        row = conn.execute(
-            "SELECT * FROM ip_geo WHERE client_ip = ?",
-            (client_ip,),
-        ).fetchone()
-        if row:
-            return dict(row)
-
-    upsert_ip_geo([client_ip])
-
-    with _get_conn() as conn:
-        row = conn.execute(
-            "SELECT * FROM ip_geo WHERE client_ip = ?",
-            (client_ip,),
-        ).fetchone()
-    return dict(row) if row else None
-
-
-def backfill_ip_geo(limit: int = 5000) -> int:
-    """Enrich IPs found in ip_summary.json files that are missing from ip_geo."""
-    all_ips: set[str] = set()
-    if PROJECTS_ROOT.exists():
-        for f in PROJECTS_ROOT.glob("*/uploads/*/ip_summary.json"):
-            try:
-                with open(f, encoding="utf-8") as fh:
-                    all_ips.update(json.load(fh).get("ips", {}).keys())
-            except Exception:
-                pass
-    if not all_ips:
-        return 0
-    all_ips_list = sorted(all_ips)[:limit]
-    placeholders = ",".join(["?"] * len(all_ips_list))
-    with _get_conn() as conn:
-        existing = {
-            row[0]
-            for row in conn.execute(
-                f"SELECT client_ip FROM ip_geo WHERE client_ip IN ({placeholders})",
-                all_ips_list,
-            ).fetchall()
-        }
-    missing = [ip for ip in all_ips_list if ip not in existing]
-    return upsert_ip_geo(missing) if missing else 0
-
-
-def get_geo_summary(limit: int = 10, project_id: str | None = None) -> dict:
-    # Ensure IPs from uploads are in the ip_geo cache
-    backfill_ip_geo()
-
-    # Aggregate detection counts per IP from rule_matches.json files
-    # NOTE: _load_all_matches() applies _normalise_match_severity() which ensures
-    # match["severity"] reflects the active severity field (severity_v2 by default)
-    matches = _load_all_matches(project_id)
-    ip_counts:   dict[str, int]       = {}
-    ip_severity: dict[str, dict]      = {}
-    for m in matches:
-        ip = m.get("client_ip")
-        if not ip:
-            continue
-        ip_counts[ip] = ip_counts.get(ip, 0) + 1
-        sev = (m.get("severity") or "unknown").lower()  # Already normalized to active field
-        if ip not in ip_severity:
-            ip_severity[ip] = {"critical": 0, "high": 0, "medium": 0, "low": 0}
-        ip_severity[ip][sev] = ip_severity[ip].get(sev, 0) + 1
-
-    # Fetch geo for known IPs
-    if ip_counts:
-        all_ips = list(ip_counts.keys())
-        ph = ",".join(["?"] * len(all_ips))
-        with _get_conn() as conn:
-            geo_rows = conn.execute(
-                f"SELECT client_ip, country_code, country_name, is_private_or_unknown "
-                f"FROM ip_geo WHERE client_ip IN ({ph})",
-                all_ips,
-            ).fetchall()
-        geo_map = {r["client_ip"]: dict(r) for r in geo_rows}
-    else:
-        geo_map = {}
-
-    # Aggregate by country
-    country_agg: dict[str, dict] = {}
-    for ip, count in ip_counts.items():
-        geo     = geo_map.get(ip, {})
-        cc      = geo.get("country_code") or "ZZ"
-        cn      = geo.get("country_name") or "Unknown"
-        is_priv = int(geo.get("is_private_or_unknown") or 1)
-        if is_priv:
-            cc = "ZZ"; cn = "Private / Unknown"
-        if cc not in country_agg:
-            country_agg[cc] = {
-                "country_code":          cc,
-                "country_name":          cn,
-                "is_private_or_unknown": is_priv,
-                "detection_count":       0,
-                "unique_ips":            set(),
-                "critical_count": 0, "high_count": 0, "medium_count": 0, "low_count": 0,
-            }
-        country_agg[cc]["detection_count"] += count
-        country_agg[cc]["unique_ips"].add(ip)
-        sev_data = ip_severity.get(ip, {})
-        for sev in ("critical", "high", "medium", "low"):
-            country_agg[cc][f"{sev}_count"] += sev_data.get(sev, 0)
-
-    countries = []
-    for v in country_agg.values():
-        c = dict(v)
-        c["unique_ips"] = len(v["unique_ips"])
-        countries.append(c)
-    countries.sort(key=lambda x: -x["detection_count"])
-
-    geolocated = [c for c in countries if c["country_code"] != "ZZ" and not c["is_private_or_unknown"]]
-    unknown    = [c for c in countries if c["country_code"] == "ZZ" or c["is_private_or_unknown"]]
-
-    total_det  = sum(c["detection_count"] for c in countries)
-    geo_det    = sum(c["detection_count"] for c in geolocated)
-    unk_det    = sum(c["detection_count"] for c in unknown)
-    top_country  = geolocated[0] if geolocated else None
-    coverage_pct = round((geo_det / total_det) * 100, 1) if total_det else 0.0
-
-    return {
-        "countries_impacted":      len(geolocated),
-        "total_detections":        total_det,
-        "geolocated_detections":   geo_det,
-        "unknown_detections":      unk_det,
-        "coverage_pct":            coverage_pct,
-        "top_source_country":      top_country,
-        "countries":               geolocated,
-        "top_countries":           geolocated[:limit],
-        "backfilled_ip_count":     0,
-    }
-
-
 def get_stats(project_id: str | None = None) -> dict:
     # NOTE: _load_all_matches() applies _normalise_match_severity() which ensures
     # match["severity"] reflects the active severity field (severity_v2 by default)
@@ -680,20 +477,15 @@ def get_stats(project_id: str | None = None) -> dict:
 
 def get_ip_summary(client_ip: str, project_id: str | None = None) -> dict:
     """Return aggregated stats for a single IP from ip_summary.json files."""
-    geo = ensure_ip_geo(client_ip)
     ips = _load_ip_summaries(project_id)
     s   = ips.get(client_ip)
     if s:
         return {
             "client_ip":           client_ip,
-            "country_code":        geo.get("country_code") if geo else None,
-            "country_name":        geo.get("country_name") if geo else "Unknown",
             **s,
         }
     return {
         "client_ip":           client_ip,
-        "country_code":        geo.get("country_code") if geo else None,
-        "country_name":        geo.get("country_name") if geo else "Unknown",
         "request_count":       0,
         "unique_paths":        0,
         "first_seen":          None,

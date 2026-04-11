@@ -124,6 +124,7 @@ function MatrixCell({ hit, color }: { hit: boolean; color?: string }) {
 
 export default function CorrelationPage() {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [ipRows, setIpRows] = useState<IpRow[]>([]);
   const [heatRules, setHeatRules] = useState<string[]>([]);
   const [heatIps, setHeatIps] = useState<string[]>([]);
@@ -133,78 +134,102 @@ export default function CorrelationPage() {
   const { activeProject, timeRange } = useAuthStore();
   const scope = { projectId: activeProject?.id, startTs: timeRange?.from, endTs: timeRange?.to };
 
-  const loadData = useCallback(() => {
-    if (!activeProject?.id) { setLoading(false); return; }
-    setLoading(true);
-    Promise.all([getRuleMatches(scope), getBehavioralResults({ projectId: scope.projectId })]).then(([rm, beh]) => {
-      const matches = rm.matches as RuleMatch[];
-      const behData = beh as BehResult;
-
-      // Collect all known IPs from matches
-      const allIps = [...new Set(matches.map((m) => m.client_ip).filter(Boolean))] as string[];
-
-      // Behavioral IP sets
-      const rateIps = new Set(
-        (behData.request_rate_spikes ?? []).filter((r) => r.is_anomaly).map((r) => r.ip ?? r.client_ip).filter(Boolean) as string[]
-      );
-      const urlIps = new Set(
-        (behData.url_enumeration ?? []).filter((r) => r.is_anomaly).map((r) => r.ip ?? r.client_ip).filter(Boolean) as string[]
-      );
-      const statusIps = new Set(
-        (behData.status_code_spikes ?? []).filter((r) => r.is_anomaly).map(() => "").filter(Boolean) as string[]
-      );
-      const visitorIps = new Set(
-        (behData.visitor_rates ?? []).filter((r) => r.is_anomaly).map((r) => r.ip).filter(Boolean) as string[]
-      );
-
-      // Build per-IP rows
-      const rows: IpRow[] = allIps.map((ip) => {
-        const ipMatches = matches.filter((m) => m.client_ip === ip);
-        const highestSev = ipMatches.reduce<string>((best, m) => {
-          const sev = (m.severity ?? "").toUpperCase();
-          return (SEV_ORDER[sev] ?? 0) > (SEV_ORDER[best] ?? 0) ? sev : best;
-        }, "LOW");
-        const rateSpike = rateIps.has(ip);
-        const urlEnum = urlIps.has(ip);
-        const statusSpike = statusIps.has(ip);
-        const visitorAnomaly = visitorIps.has(ip);
-        const riskScore =
-          (rateSpike ? 3 : 0) +
-          (urlEnum ? 2 : 0) +
-          (visitorAnomaly ? 1 : 0) +
-          ((highestSev === "CRITICAL") ? 20 : (highestSev === "HIGH") ? 10 : 0);
-        const isCorrelated = ipMatches.length > 0 && (rateSpike || urlEnum || visitorAnomaly);
-        return { ip, ruleMatchCount: ipMatches.length, highestSev, rateSpike, urlEnum, statusSpike, visitorAnomaly, riskScore, isCorrelated };
-      });
-
-      rows.sort((a, b) => b.riskScore - a.riskScore);
-      setIpRows(rows);
-
-      // Build Rule x IP heatmap (top 10 rules x top 15 IPs)
-      const topHeatIps = rows.slice(0, 15).map((r) => r.ip);
-      const ruleCountMap: Record<string, number> = {};
-      matches.forEach((m) => {
-        if (m.rule_id) ruleCountMap[m.rule_id] = (ruleCountMap[m.rule_id] ?? 0) + 1;
-      });
-      const topRules = Object.entries(ruleCountMap).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id]) => id);
-
-      const grid: Record<string, Record<string, number>> = {};
-      let maxVal = 0;
-      topRules.forEach((ruleId) => {
-        grid[ruleId] = {};
-        topHeatIps.forEach((ip) => {
-          const count = matches.filter((m) => m.rule_id === ruleId && m.client_ip === ip).length;
-          grid[ruleId][ip] = count;
-          if (count > maxVal) maxVal = count;
-        });
-      });
-
-      setHeatRules(topRules);
-      setHeatIps(topHeatIps);
-      setHeatGrid(grid);
-      setHeatMax(maxVal);
+  const loadData = useCallback(async () => {
+    if (!activeProject?.id) {
       setLoading(false);
+      setError(null);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    const [ruleResult, behavioralResult] = await Promise.allSettled([
+      getRuleMatches(scope),
+      getBehavioralResults({ projectId: scope.projectId }),
+    ]);
+
+    if (ruleResult.status !== "fulfilled") {
+      setIpRows([]);
+      setHeatRules([]);
+      setHeatIps([]);
+      setHeatGrid({});
+      setHeatMax(1);
+      setLoading(false);
+      setError("Unable to load rule matches for correlation.");
+      return;
+    }
+
+    const matches = ruleResult.value.matches as RuleMatch[];
+    const behData = behavioralResult.status === "fulfilled" ? (behavioralResult.value as BehResult) : {};
+    if (behavioralResult.status !== "fulfilled") {
+      setError("Behavioral results not available yet. Correlation currently uses rule matches only.");
+    }
+
+    // Collect all known IPs from matches
+    const allIps = [...new Set(matches.map((m) => m.client_ip).filter(Boolean))] as string[];
+
+    // Behavioral IP sets
+    const rateIps = new Set(
+      (behData.request_rate_spikes ?? []).filter((r) => r.is_anomaly).map((r) => r.ip ?? r.client_ip).filter(Boolean) as string[]
+    );
+    const urlIps = new Set(
+      (behData.url_enumeration ?? []).filter((r) => r.is_anomaly).map((r) => r.ip ?? r.client_ip).filter(Boolean) as string[]
+    );
+    const statusIps = new Set(
+      (behData.status_code_spikes ?? []).filter((r) => r.is_anomaly).map(() => "").filter(Boolean) as string[]
+    );
+    const visitorIps = new Set(
+      (behData.visitor_rates ?? []).filter((r) => r.is_anomaly).map((r) => r.ip).filter(Boolean) as string[]
+    );
+
+    // Build per-IP rows
+    const rows: IpRow[] = allIps.map((ip) => {
+      const ipMatches = matches.filter((m) => m.client_ip === ip);
+      const highestSev = ipMatches.reduce<string>((best, m) => {
+        const sev = (m.severity ?? "").toUpperCase();
+        return (SEV_ORDER[sev] ?? 0) > (SEV_ORDER[best] ?? 0) ? sev : best;
+      }, "LOW");
+      const rateSpike = rateIps.has(ip);
+      const urlEnum = urlIps.has(ip);
+      const statusSpike = statusIps.has(ip);
+      const visitorAnomaly = visitorIps.has(ip);
+      const riskScore =
+        (rateSpike ? 3 : 0) +
+        (urlEnum ? 2 : 0) +
+        (visitorAnomaly ? 1 : 0) +
+        ((highestSev === "CRITICAL") ? 20 : (highestSev === "HIGH") ? 10 : 0);
+      const isCorrelated = ipMatches.length > 0 && (rateSpike || urlEnum || visitorAnomaly);
+      return { ip, ruleMatchCount: ipMatches.length, highestSev, rateSpike, urlEnum, statusSpike, visitorAnomaly, riskScore, isCorrelated };
     });
+
+    rows.sort((a, b) => b.riskScore - a.riskScore);
+    setIpRows(rows);
+
+    // Build Rule x IP heatmap (top 10 rules x top 15 IPs)
+    const topHeatIps = rows.slice(0, 15).map((r) => r.ip);
+    const ruleCountMap: Record<string, number> = {};
+    matches.forEach((m) => {
+      if (m.rule_id) ruleCountMap[m.rule_id] = (ruleCountMap[m.rule_id] ?? 0) + 1;
+    });
+    const topRules = Object.entries(ruleCountMap).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id]) => id);
+
+    const grid: Record<string, Record<string, number>> = {};
+    let maxVal = 0;
+    topRules.forEach((ruleId) => {
+      grid[ruleId] = {};
+      topHeatIps.forEach((ip) => {
+        const count = matches.filter((m) => m.rule_id === ruleId && m.client_ip === ip).length;
+        grid[ruleId][ip] = count;
+        if (count > maxVal) maxVal = count;
+      });
+    });
+
+    setHeatRules(topRules);
+    setHeatIps(topHeatIps);
+    setHeatGrid(grid);
+    setHeatMax(maxVal);
+    setLoading(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProject?.id, timeRange?.from, timeRange?.to]);
 
@@ -243,6 +268,12 @@ export default function CorrelationPage() {
         </div>
       </div>
 
+      {error && (
+        <div style={{ marginBottom: 16, border: "1px solid #2a2a2a", borderRadius: 4, padding: "8px 12px", color: "#8a8a8a", fontSize: 11 }}>
+          {error}
+        </div>
+      )}
+
       {/* KPI Row */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 24 }}>
         <MetricCard label="Known IPs" value={totalIps} sub="from rule matches" accent="#c0c0c0" />
@@ -276,7 +307,7 @@ export default function CorrelationPage() {
               <tbody>
                 {correlatedRows.map((row) => (
                   <tr key={row.ip} style={{ borderBottom: "1px solid #1a1a1a" }}>
-                    <td style={{ padding: "7px 10px", color: "#c0c0c0", fontFamily: "monospace", fontWeight: 700 }}>
+                    <td style={{ padding: "7px 10px", color: "#c0c0c0", fontFamily: "var(--font-mono-stack)", fontWeight: 700 }}>
                       {row.ip}
                       {row.highestSev === "CRITICAL" && (
                         <span style={{ marginLeft: 6, background: "#ff4c4c22", color: "#ff4c4c", borderRadius: 4, padding: "1px 6px", fontSize: 10, fontWeight: 700 }}>CRITICAL</span>
@@ -325,7 +356,7 @@ export default function CorrelationPage() {
             <tbody>
               {ipRows.slice(0, 15).map((row) => (
                 <tr key={row.ip} style={{ borderBottom: "1px solid #161616" }}>
-                  <td style={{ padding: "4px 10px", color: "#c0c0c0", fontFamily: "monospace", fontSize: 11 }}>{row.ip}</td>
+                  <td style={{ padding: "4px 10px", color: "#c0c0c0", fontFamily: "var(--font-mono-stack)", fontSize: 11 }}>{row.ip}</td>
                   <td style={{ padding: "4px 6px" }}>
                     <MatrixCell hit={row.ruleMatchCount > 0} color="#808080" />
                   </td>
@@ -384,7 +415,7 @@ export default function CorrelationPage() {
               <tbody>
                 {heatRules.map((ruleId) => (
                   <tr key={ruleId}>
-                    <td style={{ padding: "3px 8px", color: "#c0c0c0", fontFamily: "monospace", fontSize: 10 }}>{ruleId}</td>
+                    <td style={{ padding: "3px 8px", color: "#c0c0c0", fontFamily: "var(--font-mono-stack)", fontSize: 10 }}>{ruleId}</td>
                     {heatIps.map((ip) => {
                       const count = heatGrid[ruleId]?.[ip] ?? 0;
                       return (
@@ -435,7 +466,7 @@ export default function CorrelationPage() {
                 const modules = [row.rateSpike && "R", row.urlEnum && "U", row.visitorAnomaly && "V"].filter(Boolean);
                 return (
                   <tr key={row.ip} style={{ borderBottom: "1px solid #161616" }}>
-                    <td style={{ padding: "6px 10px", color: "#c0c0c0", fontFamily: "monospace" }}>
+                    <td style={{ padding: "6px 10px", color: "#c0c0c0", fontFamily: "var(--font-mono-stack)" }}>
                       {row.ip}
                       {row.isCorrelated && <span style={{ marginLeft: 6, color: "#7cb342", fontSize: 10, fontWeight: 700 }}>CORRELATED</span>}
                     </td>
@@ -444,7 +475,7 @@ export default function CorrelationPage() {
                       <span style={{ color: severityColor(row.highestSev), fontWeight: 700, fontSize: 11 }}>{row.highestSev}</span>
                     </td>
                     <td style={{ padding: "6px 10px", textAlign: "center" }}>
-                      <span style={{ fontFamily: "monospace", color: "#666", fontSize: 11 }}>
+                      <span style={{ fontFamily: "var(--font-mono-stack)", color: "#666", fontSize: 11 }}>
                         {modules.length > 0 ? modules.join("+") : "—"}
                       </span>
                     </td>

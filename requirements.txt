@@ -6,7 +6,6 @@ groq
 ijson
 python-multipart
 requests
-maxminddb
 python-evtx
 numpy
 scikit-learn

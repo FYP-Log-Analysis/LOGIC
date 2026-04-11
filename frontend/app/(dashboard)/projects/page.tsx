@@ -314,7 +314,7 @@ export default function ProjectsPage() {
     <div>
       <SectionHeader
         title="Projects"
-        subtitle="Isolate log pipelines by project — each project maintains its own log data and analysis results"
+        subtitle="Create separate projects for different environments, applications, or teams."
       />
 
       {/* Active Project Banner */}
@@ -604,12 +604,12 @@ export default function ProjectsPage() {
                   The configuration includes your project ID and API key header for direct ingestion to LOGIC.
                 </div>
                 <div style={{ fontSize: 11, color: "#6e8796", marginBottom: 4 }}>NXLog Configuration</div>
-                <pre style={{ fontFamily: "monospace", fontSize: 11, color: "#a7d97a", background: "#06090c", border: "1px solid #1a222a", padding: 8, borderRadius: 4, marginBottom: 10, whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 320, overflowY: "auto" }}>
+                <pre style={{ fontFamily: "var(--font-mono-stack)", fontSize: 11, color: "#a7d97a", background: "#06090c", border: "1px solid #1a222a", padding: 8, borderRadius: 4, marginBottom: 10, whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 320, overflowY: "auto" }}>
                   {nxlogConfByProject[agentSetupProjectId] || "NXLog config unavailable. Click AGENT SETUP again to regenerate."}
                 </pre>
 
                 <div style={{ fontSize: 11, color: "#6e8796", marginBottom: 4 }}>Copy-ready API key command</div>
-                <div style={{ fontFamily: "monospace", fontSize: 11, color: "#9fd4ff", background: "#06090c", border: "1px solid #1a222a", padding: 8, borderRadius: 4, marginBottom: 10, wordBreak: "break-all" }}>
+                <div style={{ fontFamily: "var(--font-mono-stack)", fontSize: 11, color: "#9fd4ff", background: "#06090c", border: "1px solid #1a222a", padding: 8, borderRadius: 4, marginBottom: 10, wordBreak: "break-all" }}>
                   {(() => {
                     const key = apiKeys[agentSetupProjectId] || "<generate-project-key-first>";
                     return `Write-Output \"${key}\" | Set-Clipboard`;

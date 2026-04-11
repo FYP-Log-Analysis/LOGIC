@@ -5,6 +5,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/store";
 
+type SidebarProps = {
+  onHide?: () => void;
+};
+
 const NAV_SHARED = [
   { key: "projects", href: "/projects", label: "Projects", analystOnly: true },
   { key: "overview", href: "/overview", label: "Overview", analystOnly: true },
@@ -64,7 +68,7 @@ const NAV_COMMON = [
   { key: "admin", href: "/admin", label: "Admin", adminOnly: true },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ onHide }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, activeProject, logout, activeLogType, setActiveLogType } = useAuthStore();
@@ -105,29 +109,65 @@ export default function Sidebar() {
         style={{
           padding: "20px 16px 24px",
           borderBottom: "1px solid #1a1a1a",
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 12,
         }}
       >
-        <div
-          style={{
-            fontSize: 15,
-            letterSpacing: 4,
-            color: "#e0e0e0",
-            fontWeight: 300,
-          }}
-        >
-          LOGIC
+        <div>
+          <div
+            style={{
+              fontSize: 15,
+              letterSpacing: 4,
+              color: "#e0e0e0",
+              fontWeight: 300,
+            }}
+          >
+            LOGIC
+          </div>
+          <div
+            style={{
+              fontSize: 9,
+              letterSpacing: 3,
+              color: "#333",
+              marginTop: 4,
+              textTransform: "uppercase",
+            }}
+          >
+            {effectiveLogType === "windows" ? "Windows Agent" : "Web Agent"} · Security Analysis
+          </div>
         </div>
-        <div
-          style={{
-            fontSize: 9,
-            letterSpacing: 3,
-            color: "#333",
-            marginTop: 4,
-            textTransform: "uppercase",
-          }}
-        >
-          {effectiveLogType === "windows" ? "Windows Agent" : "Web Agent"} · Security Analysis
-        </div>
+        {onHide && (
+          <button
+            type="button"
+            onClick={onHide}
+            aria-label="Hide sidebar"
+            style={{
+              border: "1px solid #2a2a2a",
+              background: "#111",
+              color: "#888",
+              borderRadius: 2,
+              padding: "4px 10px",
+              fontSize: 10,
+              letterSpacing: 1,
+              textTransform: "uppercase",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              flexShrink: 0,
+            }}
+            onMouseEnter={(e) => {
+              (e.target as HTMLButtonElement).style.borderColor = "#4a4a4a";
+              (e.target as HTMLButtonElement).style.color = "#c0c0c0";
+            }}
+            onMouseLeave={(e) => {
+              (e.target as HTMLButtonElement).style.borderColor = "#2a2a2a";
+              (e.target as HTMLButtonElement).style.color = "#888";
+            }}
+          >
+            Hide
+          </button>
+        )}
       </div>
 
       {/* User badge */}

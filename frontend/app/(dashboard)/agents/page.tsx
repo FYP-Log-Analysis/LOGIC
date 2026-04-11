@@ -256,14 +256,14 @@ export default function AgentsPage() {
                       padding: "8px 10px",
                     }}
                   >
-                    <div style={{ flex: 1, color: "#a7d97a", fontFamily: "monospace", fontSize: 11, wordBreak: "break-all" }}>{p}</div>
+                    <div style={{ flex: 1, color: "#a7d97a", fontFamily: "var(--font-mono-stack)", fontSize: 11, wordBreak: "break-all" }}>{p}</div>
                   </div>
                 ))}
               </div>
             )}
 
             <div style={{ fontSize: 10, color: "#6e8796", marginBottom: 4 }}>Copy-ready API key command</div>
-            <div style={{ fontFamily: "monospace", fontSize: 11, color: "#9fd4ff", marginBottom: 10, whiteSpace: "pre-wrap", wordBreak: "break-all", background: "#090909", border: "1px solid #1a1a1a", borderRadius: 3, padding: "8px 10px" }}>
+            <div style={{ fontFamily: "var(--font-mono-stack)", fontSize: 11, color: "#9fd4ff", marginBottom: 10, whiteSpace: "pre-wrap", wordBreak: "break-all", background: "#090909", border: "1px solid #1a1a1a", borderRadius: 3, padding: "8px 10px" }}>
               {`Write-Output "${selectedApiKey ?? "<generate-api-key-from-projects-page>"}" | Set-Clipboard`}
             </div>
 
@@ -299,7 +299,7 @@ export default function AgentsPage() {
                 margin: 0,
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-word",
-                fontFamily: "monospace",
+                fontFamily: "var(--font-mono-stack)",
                 fontSize: 11,
                 color: "#a7d97a",
                 background: "#090909",
@@ -345,7 +345,7 @@ export default function AgentsPage() {
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   {monitor!.validation_errors.slice(-5).reverse().map((evt, idx) => (
-                    <div key={`val-${idx}-${evt.timestamp}`} style={{ color: "#cc8888", fontSize: 11, fontFamily: "monospace", background: "#120909", border: "1px solid #2a1515", borderRadius: 3, padding: "6px 8px" }}>
+                    <div key={`val-${idx}-${evt.timestamp}`} style={{ color: "#cc8888", fontSize: 11, fontFamily: "var(--font-mono-stack)", background: "#120909", border: "1px solid #2a1515", borderRadius: 3, padding: "6px 8px" }}>
                       [{new Date(evt.timestamp * 1000).toLocaleString()}] {evt.message}
                     </div>
                   ))}
@@ -360,7 +360,7 @@ export default function AgentsPage() {
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   {monitor!.processing_errors.slice(-5).reverse().map((evt, idx) => (
-                    <div key={`proc-${idx}-${evt.timestamp}`} style={{ color: "#cc8888", fontSize: 11, fontFamily: "monospace", background: "#120909", border: "1px solid #2a1515", borderRadius: 3, padding: "6px 8px" }}>
+                    <div key={`proc-${idx}-${evt.timestamp}`} style={{ color: "#cc8888", fontSize: 11, fontFamily: "var(--font-mono-stack)", background: "#120909", border: "1px solid #2a1515", borderRadius: 3, padding: "6px 8px" }}>
                       [{new Date(evt.timestamp * 1000).toLocaleString()}] {evt.message}
                     </div>
                   ))}

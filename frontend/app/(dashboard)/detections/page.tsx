@@ -17,6 +17,7 @@ import PieChart from "@/components/charts/pie-chart";
 import LineChart from "@/components/charts/line-chart";
 import { ThreatTimeline, type ThreatEvent } from "@/components/threat-timeline";
 import { EventDetailModal } from "@/components/event-detail-modal";
+import { WindowsEventTable } from "@/components/windows-ui";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -327,7 +328,7 @@ function ThreatTable({
             cursor: "pointer",
           }}
         >
-          {successfulOnly ? "⚠ Successful Hits" : "Successful Hits"}
+          {successfulOnly ? "Only Successful" : "Successful Only"}
         </button>
         <div style={{ fontSize: 11, color: "#444", alignSelf: "center", whiteSpace: "nowrap" }}>
           {filtered.length.toLocaleString()} / {matches.length.toLocaleString()}
@@ -341,68 +342,141 @@ function ThreatTable({
         </Btn>
       </div>
 
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-        <thead>
-          <tr style={{ borderBottom: "1px solid #1e1e1e" }}>
-            {["Triage", "Severity", "Rule", "IP", "Method", "Path", "Status", "Time"].map((h) => (
-              <th key={h} style={{ textAlign: "left", color: "#444", padding: "6px 8px", fontSize: 10, letterSpacing: 0.8, textTransform: "uppercase" }}>
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {filtered.slice(0, 200).map((m, i) => {
-            const sev = (m.severity ?? "unknown").toLowerCase();
-            const c = SEV_COLORS[sev] ?? "#555";
-            const key = getAlertKey(m);
-            const triage = triageMap[key] ?? "new";
-            return (
-              <tr key={i} style={{ borderBottom: "1px solid #0f0f0f" }}>
-                <td style={{ padding: "6px 8px" }}>
-                  <button
-                    onClick={() => onTriageChange(key, TRIAGE_CYCLE[triage])}
-                    title="Click to cycle: New → Investigating → Resolved"
-                    style={{
-                      background: "transparent",
-                      border: `1px solid ${TRIAGE_COLORS[triage]}44`,
-                      color: TRIAGE_COLORS[triage],
-                      borderRadius: 2,
-                      padding: "2px 6px",
-                      fontSize: 9,
-                      letterSpacing: 0.6,
-                      textTransform: "uppercase",
-                      cursor: "pointer",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {triage}
-                  </button>
-                </td>
-                <td style={{ padding: "6px 8px" }}>
-                  <span style={{ color: c, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5 }}>{m.severity ?? "—"}</span>
-                </td>
-                <td style={{ padding: "6px 8px", color: "#c0c0c0", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                  title={m.rule_title ?? m.rule_id ?? ""}>
-                  {m.rule_title ?? m.rule_id ?? "—"}
-                </td>
-                <td style={{ padding: "6px 8px", color: "#808080", fontFamily: "monospace", fontSize: 11 }}>{m.client_ip ?? "—"}</td>
-                <td style={{ padding: "6px 8px", color: "#666", fontFamily: "monospace", fontSize: 11 }}>{m.method ?? "—"}</td>
-                <td style={{ padding: "6px 8px", color: "#555", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                  title={m.path ?? ""}>{m.path ?? "—"}</td>
-                <td style={{ padding: "6px 8px", fontFamily: "monospace", fontSize: 11 }}>
-                  <span style={{ color: Number(m.status_code ?? 0) >= 500 ? "#ff4444" : Number(m.status_code ?? 0) >= 400 ? "#f0c040" : Number(m.status_code ?? 0) >= 200 ? "#4caf50" : "#555" }}>
-                    {m.status_code ?? "—"}
-                  </span>
-                </td>
-                <td style={{ padding: "6px 8px", color: "#444", whiteSpace: "nowrap", fontSize: 11 }}>
-                  {m.timestamp ? new Date(m.timestamp).toLocaleString() : "—"}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <WindowsEventTable
+        density="compact"
+        maxHeight={560}
+        stickyHeader
+        emptyMessage="No detections found for the current filters"
+        rowKey={(row) => String(row.id ?? "")}
+        data={filtered.slice(0, 200).map((match, index) => {
+          const key = getAlertKey(match);
+          const triage = triageMap[key] ?? "new";
+          return {
+            id: `${key}:${index}`,
+            key,
+            match,
+            triage,
+          };
+        }) as Array<Record<string, unknown>>}
+        columns={[
+          {
+            key: "triage",
+            label: "Triage",
+            width: "104px",
+            render: (row) => {
+              const triage = String(row.triage || "new") as TriageStatus;
+              const alertKey = String(row.key || "");
+              return (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTriageChange(alertKey, TRIAGE_CYCLE[triage]);
+                  }}
+                  title="Click to cycle: New → Investigating → Resolved"
+                  style={{
+                    background: "transparent",
+                    border: `1px solid ${TRIAGE_COLORS[triage]}44`,
+                    color: TRIAGE_COLORS[triage],
+                    borderRadius: 2,
+                    padding: "2px 6px",
+                    fontSize: 9,
+                    letterSpacing: 0.6,
+                    textTransform: "uppercase",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {triage}
+                </button>
+              );
+            },
+          },
+          {
+            key: "severity",
+            label: "Severity",
+            width: "88px",
+            render: (row) => {
+              const m = row.match as RuleMatch;
+              const sev = (m.severity ?? "unknown").toLowerCase();
+              const c = SEV_COLORS[sev] ?? "#555";
+              return <span style={{ color: c, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5 }}>{m.severity ?? "—"}</span>;
+            },
+          },
+          {
+            key: "rule",
+            label: "Rule",
+            width: "240px",
+            render: (row) => {
+              const m = row.match as RuleMatch;
+              const value = m.rule_title ?? m.rule_id ?? "—";
+              return (
+                <div
+                  style={{ color: "#c0c0c0", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  title={value}
+                >
+                  {value}
+                </div>
+              );
+            },
+          },
+          {
+            key: "ip",
+            label: "IP",
+            width: "130px",
+            render: (row) => {
+              const m = row.match as RuleMatch;
+              return <span style={{ color: "#808080", fontFamily: "var(--font-mono-stack)", fontSize: 11 }}>{m.client_ip ?? "—"}</span>;
+            },
+          },
+          {
+            key: "method",
+            label: "Method",
+            width: "84px",
+            render: (row) => {
+              const m = row.match as RuleMatch;
+              return <span style={{ color: "#666", fontFamily: "var(--font-mono-stack)", fontSize: 11 }}>{m.method ?? "—"}</span>;
+            },
+          },
+          {
+            key: "path",
+            label: "Path",
+            width: "240px",
+            render: (row) => {
+              const m = row.match as RuleMatch;
+              const value = m.path ?? "—";
+              return (
+                <div
+                  style={{ color: "#555", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  title={value}
+                >
+                  {value}
+                </div>
+              );
+            },
+          },
+          {
+            key: "status",
+            label: "Status",
+            width: "72px",
+            render: (row) => {
+              const m = row.match as RuleMatch;
+              const sc = Number(m.status_code ?? 0);
+              const tone = sc >= 500 ? "#a6a6a6" : sc >= 400 ? "#bdbdbd" : sc >= 200 ? "#d6d6d6" : "#555";
+              return <span style={{ color: tone, fontFamily: "var(--font-mono-stack)", fontSize: 11 }}>{m.status_code ?? "—"}</span>;
+            },
+          },
+          {
+            key: "time",
+            label: "Time",
+            width: "190px",
+            render: (row) => {
+              const m = row.match as RuleMatch;
+              return <span style={{ color: "#444", whiteSpace: "nowrap", fontSize: 11 }}>{m.timestamp ? new Date(m.timestamp).toLocaleString() : "—"}</span>;
+            },
+          },
+        ]}
+      />
       {filtered.length > 200 && (
         <div style={{ color: "#444", fontSize: 11, marginTop: 6, textAlign: "center" }}>
           Showing 200 of {filtered.length.toLocaleString()} — refine filters to narrow results

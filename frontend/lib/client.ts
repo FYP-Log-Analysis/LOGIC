@@ -117,31 +117,6 @@ export async function getRuleMatches(opts?: ScopeOpts) {
   };
 }
 
-export interface GeoCountrySummary {
-  country_code: string;
-  country_name: string;
-  detection_count: number;
-  unique_ips: number;
-  critical_count: number;
-  high_count: number;
-  medium_count: number;
-  low_count: number;
-}
-
-export async function getGeoSummary(limit = 10, opts?: Pick<ScopeOpts, "projectId">) {
-  return apiGet<{
-    countries_impacted: number;
-    total_detections: number;
-    geolocated_detections: number;
-    unknown_detections: number;
-    coverage_pct: number;
-    backfilled_ip_count: number;
-    top_source_country: GeoCountrySummary | null;
-    countries: GeoCountrySummary[];
-    top_countries: GeoCountrySummary[];
-  }>(buildQuery(`api/search/geography/summary`, { projectId: opts?.projectId, limit }));
-}
-
 // ── Analysis ─────────────────────────────────────────────────────────────────
 
 export async function runAnalysis(params?: {
@@ -222,8 +197,6 @@ export async function getBehavioralResults(opts?: Pick<ScopeOpts, "projectId">) 
 export async function getIpSummary(clientIp: string) {
   return apiGet<{
     client_ip: string;
-    country_code: string | null;
-    country_name: string;
     request_count: number;
     unique_paths: number;
     first_seen: string | null;
@@ -466,7 +439,42 @@ export async function runWindowsSigmaAnalysis(params?: {
   );
 }
 
-export async function getWindowsSigmaResults(opts?: Pick<ScopeOpts, "projectId" | "uploadId">) {
+export async function getWindowsSigmaRunStatus(runId: string) {
+  return apiGet<{ status?: string; error?: string; [key: string]: unknown }>(
+    `api/analysis/windows/run/${encodeURIComponent(runId)}`,
+  );
+}
+
+export async function cancelWindowsSigmaRun(runId: string) {
+  return apiPost<{ status?: string; run_status?: string; message?: string; [key: string]: unknown }>(
+    `api/analysis/windows/run/${encodeURIComponent(runId)}/cancel`,
+    {},
+  );
+}
+
+export interface WindowsSigmaResultsOptions extends Pick<ScopeOpts, "projectId" | "uploadId" | "startTs" | "endTs"> {
+  limit?: number;
+  offset?: number;
+  sort?: string;
+  fields?: string[];
+  includeEntry?: boolean;
+}
+
+export async function getWindowsSigmaResults(opts?: WindowsSigmaResultsOptions) {
+  const query = new URLSearchParams();
+  if (opts?.projectId) query.set("project_id", opts.projectId);
+  if (opts?.uploadId) query.set("upload_id", opts.uploadId);
+  if (opts?.startTs) query.set("start_ts", opts.startTs);
+  if (opts?.endTs) query.set("end_ts", opts.endTs);
+  if (opts?.limit != null) query.set("limit", String(opts.limit));
+  if (opts?.offset != null) query.set("offset", String(opts.offset));
+  if (opts?.sort) query.set("sort", opts.sort);
+  if (opts?.fields && opts.fields.length > 0) query.set("fields", opts.fields.join(","));
+  if (opts?.includeEntry != null) query.set("include_entry", String(opts.includeEntry));
+
+  const suffix = query.toString();
+  const endpoint = suffix ? `api/analysis/windows/results?${suffix}` : "api/analysis/windows/results";
+
   return apiGet<{
     matches: Array<{
       rule_id: string;
@@ -476,12 +484,20 @@ export async function getWindowsSigmaResults(opts?: Pick<ScopeOpts, "projectId" 
       event_id: number | string;
       channel: string;
       timestamp: string;
-      entry: Record<string, unknown>;
+      entry?: Record<string, unknown>;
+      mitre_techniques?: Array<{ technique_id?: string; name?: string; tactic?: string }>;
+      [key: string]: unknown;
     }>;
     matched_rules: string[];
     total_matches: number;
     sigma_matches: number;
-  }>(buildQuery("api/analysis/windows/results", opts));
+    count?: number;
+    offset?: number;
+    limit?: number;
+    returned_matches?: number;
+    has_more?: boolean;
+    sort?: string;
+  }>(endpoint);
 }
 
 export interface WindowsSigmaRuleSummary {
@@ -593,6 +609,41 @@ export async function getWindowsBehavioralResults(
   opts?: Pick<ScopeOpts, "projectId" | "uploadId">,
 ): Promise<WindowsBehavioralResult> {
   return apiGet<WindowsBehavioralResult>(buildQuery("api/analysis/windows/behavioral/results", opts));
+}
+
+export async function getWindowsBehavioralWindowEvents(params: {
+  projectId?: string;
+  uploadId?: string;
+  windowStart: string;
+  windowMinutes: number;
+  limit?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params.projectId) q.set("project_id", params.projectId);
+  if (params.uploadId) q.set("upload_id", params.uploadId);
+  q.set("window_start", params.windowStart);
+  q.set("window_minutes", String(params.windowMinutes));
+  q.set("limit", String(params.limit ?? 200));
+
+  return apiGet<{
+    project_id: string;
+    upload_id: string;
+    window_start: string;
+    window_end: string;
+    window_minutes: number;
+    total_events: number;
+    events: Array<{
+      timestamp?: string;
+      computer?: string;
+      channel?: string;
+      event_id?: number | string;
+      auth_user?: string;
+      client_ip?: string;
+      level?: string;
+      message?: string;
+      [key: string]: unknown;
+    }>;
+  }>(`api/analysis/windows/behavioral/window-events?${q.toString()}`);
 }
 
 export interface WindowsEventExplanationResponse {

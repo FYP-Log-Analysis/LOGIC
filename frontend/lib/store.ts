@@ -27,6 +27,7 @@ interface AuthState {
   timeRange: TimeRange | null;
   hydrated: boolean;
   activeLogType: "web" | "windows";
+  displayMode: "default" | "compact";
 
   setUser: (user: User | null) => void;
   setActiveProject: (project: ActiveProject | null) => void;
@@ -34,6 +35,7 @@ interface AuthState {
   setTimeRange: (range: TimeRange | null) => void;
   setHydrated: (hydrated: boolean) => void;
   setActiveLogType: (logType: "web" | "windows") => void;
+  setDisplayMode: (mode: "default" | "compact") => void;
   logout: () => void;
 }
 
@@ -46,6 +48,7 @@ export const useAuthStore = create<AuthState>()(
       timeRange: null,
       hydrated: false,
       activeLogType: "web",
+      displayMode: "compact",
 
       setUser: (user) => set({ user }),
       setActiveProject: (project) => set((state) => ({
@@ -56,9 +59,17 @@ export const useAuthStore = create<AuthState>()(
       setTimeRange: (range) => set({ timeRange: range }),
       setHydrated: (hydrated) => set({ hydrated }),
       setActiveLogType: (logType) => set({ activeLogType: logType }),
+      setDisplayMode: (mode) => set({ displayMode: mode }),
 
       logout: () =>
-        set({ user: null, activeProject: null, projectSelectPending: false, timeRange: null, activeLogType: "web" }),
+        set({
+          user: null,
+          activeProject: null,
+          projectSelectPending: false,
+          timeRange: null,
+          activeLogType: "web",
+          displayMode: "compact",
+        }),
     }),
     {
       name: "logic-dashboard-store",
@@ -67,6 +78,7 @@ export const useAuthStore = create<AuthState>()(
         activeProject: state.activeProject,
         timeRange: state.timeRange,
         activeLogType: state.activeLogType,
+        displayMode: state.displayMode,
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHydrated(true);

@@ -7,6 +7,7 @@ from api.services.llm_service import async_analyse_windows_event
 import json
 import logging
 import uuid
+import threading
 from pathlib import Path
 from datetime import datetime, timezone
 import yaml
@@ -143,6 +144,70 @@ def _filter_by_time_range(items: list, start_ts: str | None, end_ts: str | None,
     return filtered
 
 
+def _severity_rank(value: str | None) -> int:
+    severity_order = {
+        "critical": 4,
+        "high": 3,
+        "medium": 2,
+        "low": 1,
+    }
+    return severity_order.get(str(value or "").lower(), 0)
+
+
+def _sort_windows_matches(matches: list[dict], sort_expr: str) -> list[dict]:
+    """Sort matches by allowed keys. Prefix with '-' for descending order."""
+    expr = (sort_expr or "-timestamp").strip()
+    descending = expr.startswith("-")
+    sort_key = expr[1:] if descending else expr
+    allowed = {"timestamp", "severity", "rule_title", "computer", "event_id", "channel"}
+    if sort_key not in allowed:
+        sort_key = "timestamp"
+        descending = True
+
+    def _key(item: dict):
+        if sort_key == "severity":
+            return _severity_rank(item.get("severity"))
+        value = item.get(sort_key)
+        if value is None:
+            return ""
+        if sort_key == "event_id":
+            try:
+                return int(value)
+            except Exception:
+                return str(value)
+        return str(value)
+
+    return sorted(matches, key=_key, reverse=descending)
+
+
+def _project_windows_match_fields(matches: list[dict], fields_expr: str | None, include_entry: bool) -> list[dict]:
+    """Return matches with optional field projection while preserving key display fields."""
+    if not fields_expr and include_entry:
+        return matches
+
+    keep_fields = {
+        "rule_id",
+        "rule_title",
+        "severity",
+        "timestamp",
+        "computer",
+        "event_id",
+        "channel",
+        "mitre_techniques",
+    }
+    if fields_expr:
+        requested = {f.strip() for f in fields_expr.split(",") if f.strip()}
+        keep_fields.update(requested)
+    if include_entry:
+        keep_fields.add("entry")
+
+    projected: list[dict] = []
+    for match in matches:
+        row = {k: v for k, v in match.items() if k in keep_fields}
+        projected.append(row)
+    return projected
+
+
 class WindowsAnalysisRequest(BaseModel):
     mode: str = "auto"
     start_ts: Optional[str] = None
@@ -158,6 +223,8 @@ class WindowsEventExplainRequest(BaseModel):
 
 # In-memory run tracking
 _windows_runs: dict = {}
+_windows_cancel_requested: set[str] = set()
+_windows_run_lock = threading.Lock()
 
 
 @router.post("/windows/explain-event")
@@ -205,27 +272,55 @@ async def run_windows_sigma(
         raise HTTPException(status_code=400, detail="No normalised log data found. Upload logs first.")
     
     run_id = str(uuid.uuid4())
-    _windows_runs[run_id] = {
-        "run_id": run_id,
-        "mode": request.mode,
-        "project_id": request.project_id,
-        "upload_id": resolved_upload_id,
-        "status": "pending",
-        "analysis_type": "windows_sigma",
-    }
+    with _windows_run_lock:
+        _windows_runs[run_id] = {
+            "run_id": run_id,
+            "mode": request.mode,
+            "project_id": request.project_id,
+            "upload_id": resolved_upload_id,
+            "status": "pending",
+            "analysis_type": "windows_sigma",
+            "cancel_requested": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
     
     def _run_windows_sigma_task():
         """Background task to run Windows Sigma detection."""
+        def _should_cancel() -> bool:
+            with _windows_run_lock:
+                return run_id in _windows_cancel_requested
+
         try:
             from core.detection.windows_sigma import run_sigma_pipeline
-            
-            _windows_runs[run_id]["status"] = "running"
+
+            with _windows_run_lock:
+                record = _windows_runs.get(run_id)
+                if not record:
+                    return
+                if run_id in _windows_cancel_requested:
+                    record["status"] = "cancelled"
+                    record["cancelled_at"] = datetime.now(timezone.utc).isoformat()
+                    _windows_cancel_requested.discard(run_id)
+                    return
+                record["status"] = "running"
+                record["started_at"] = datetime.now(timezone.utc).isoformat()
             
             # Load Windows events from normalized.json
             windows_events = []
             with open(normalised_path, "r", encoding="utf-8") as fh:
                 import ijson
-                for entry in ijson.items(fh, "item"):
+                for index, entry in enumerate(ijson.items(fh, "item")):
+                    if index % 500 == 0 and _should_cancel():
+                        with _windows_run_lock:
+                            record = _windows_runs.get(run_id)
+                            if record:
+                                record["status"] = "cancelled"
+                                record["cancelled_at"] = datetime.now(timezone.utc).isoformat()
+                                record["cancelled_at_step"] = "loading_events"
+                                record["total_events"] = len(windows_events)
+                            _windows_cancel_requested.discard(run_id)
+                        return
+
                     if entry.get("server_type") == "windows_event":
                         windows_events.append(entry)
             
@@ -246,28 +341,60 @@ async def run_windows_sigma(
                 }
                 with open(results_path, "w", encoding="utf-8") as fh:
                     json.dump(empty_result, fh, indent=2)
-                _windows_runs[run_id]["status"] = "complete"
-                _windows_runs[run_id]["total_events"] = 0
-                _windows_runs[run_id]["total_matches"] = 0
+                with _windows_run_lock:
+                    record = _windows_runs.get(run_id)
+                    if record:
+                        record["status"] = "complete"
+                        record["total_events"] = 0
+                        record["total_matches"] = 0
+                        record["completed_at"] = datetime.now(timezone.utc).isoformat()
+                    _windows_cancel_requested.discard(run_id)
                 return
-            
+
             # Run Sigma pipeline
-            result = run_sigma_pipeline(windows_events, str(SIGMA_RULES_DIR))
-            
+            result = run_sigma_pipeline(windows_events, str(SIGMA_RULES_DIR), should_cancel=_should_cancel)
+
+            if result.get("cancelled") or _should_cancel():
+                with _windows_run_lock:
+                    record = _windows_runs.get(run_id)
+                    if record:
+                        record["status"] = "cancelled"
+                        record["cancelled_at"] = datetime.now(timezone.utc).isoformat()
+                        record["total_events"] = result.get("processed_events", len(windows_events))
+                        record["total_matches"] = result.get("total_matches", 0)
+                    _windows_cancel_requested.discard(run_id)
+                return
+
             # Persist results
             results_path.parent.mkdir(parents=True, exist_ok=True)
             with open(results_path, "w", encoding="utf-8") as fh:
                 json.dump(result, fh, indent=2)
-            
-            _windows_runs[run_id]["status"] = "complete"
-            _windows_runs[run_id]["total_events"] = len(windows_events)
-            _windows_runs[run_id]["total_matches"] = result.get("total_matches", 0)
-            _windows_runs[run_id]["unique_rules"] = len(result.get("matched_rules", []))
-            
+
+            with _windows_run_lock:
+                record = _windows_runs.get(run_id)
+                if record:
+                    record["status"] = "complete"
+                    record["total_events"] = len(windows_events)
+                    record["total_matches"] = result.get("total_matches", 0)
+                    record["unique_rules"] = len(result.get("matched_rules", []))
+                    record["completed_at"] = datetime.now(timezone.utc).isoformat()
+                _windows_cancel_requested.discard(run_id)
+
         except Exception as exc:
             logger.error(f"Windows Sigma task {run_id} failed: {exc}", exc_info=True)
-            _windows_runs[run_id]["status"] = "failed"
-            _windows_runs[run_id]["error"] = str(exc)[:500]
+            with _windows_run_lock:
+                record = _windows_runs.get(run_id)
+                if not record:
+                    return
+                if run_id in _windows_cancel_requested:
+                    record["status"] = "cancelled"
+                    record["cancelled_at"] = datetime.now(timezone.utc).isoformat()
+                    _windows_cancel_requested.discard(run_id)
+                    return
+                record["status"] = "failed"
+                record["error"] = str(exc)[:500]
+                record["failed_at"] = datetime.now(timezone.utc).isoformat()
+                _windows_cancel_requested.discard(run_id)
     
     background_tasks.add_task(_run_windows_sigma_task)
     return {
@@ -283,6 +410,11 @@ async def get_windows_sigma_results(
     upload_id: Optional[str] = Query(None, description="Target a specific upload"),
     start_ts: Optional[str] = Query(None, description="Filter start time (ISO 8601)"),
     end_ts: Optional[str] = Query(None, description="Filter end time (ISO 8601)"),
+    limit: Optional[int] = Query(None, ge=1, le=5000, description="Maximum matches returned"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    sort: str = Query("-timestamp", description="Sort key, prefix with '-' for descending"),
+    fields: Optional[str] = Query(None, description="Comma-separated list of top-level match fields"),
+    include_entry: bool = Query(True, description="Include raw event entry payload"),
     _user: UserInDB = Depends(get_current_user),
 ) -> Dict:
     """Get Windows Sigma detection results with optional time filtering."""
@@ -299,15 +431,35 @@ async def get_windows_sigma_results(
     with open(results_path, "r", encoding="utf-8") as fh:
         results = json.load(fh)
     
-    # Apply time range filter if requested
+    matches = results.get("matches", [])
+
+    # Apply time range filter if requested.
     if start_ts or end_ts:
-        matches = results.get("matches", [])
-        filtered_matches = _filter_by_time_range(matches, start_ts, end_ts, "timestamp")
-        results["matches"] = filtered_matches
-        results["total_matches"] = len(filtered_matches)
-        results["sigma_matches"] = len(filtered_matches)
+        matches = _filter_by_time_range(matches, start_ts, end_ts, "timestamp")
         results["filtered_by_time"] = True
         results["time_range"] = {"start": start_ts, "end": end_ts}
+
+    # Sort and optionally project fields.
+    matches = _sort_windows_matches(matches, sort)
+    matches = _project_windows_match_fields(matches, fields, include_entry)
+
+    total_count = len(matches)
+    if limit is not None:
+        paginated_matches = matches[offset: offset + limit]
+        has_more = offset + len(paginated_matches) < total_count
+    else:
+        paginated_matches = matches[offset:] if offset else matches
+        has_more = False
+
+    results["matches"] = paginated_matches
+    results["count"] = total_count
+    results["total_matches"] = total_count
+    results["sigma_matches"] = total_count
+    results["offset"] = offset
+    results["limit"] = limit
+    results["returned_matches"] = len(paginated_matches)
+    results["has_more"] = has_more
+    results["sort"] = sort
     
     return results
 
@@ -369,10 +521,49 @@ async def get_windows_run_status(
     _user: UserInDB = Depends(get_current_user)
 ) -> Dict:
     """Get status of a Windows Sigma analysis run."""
-    record = _windows_runs.get(run_id)
+    with _windows_run_lock:
+        record = _windows_runs.get(run_id)
+        is_cancel_requested = run_id in _windows_cancel_requested
     if not record:
         raise HTTPException(status_code=404, detail=f"No Windows analysis run found with id '{run_id}'")
-    return record
+    payload = dict(record)
+    payload["cancel_requested"] = bool(payload.get("cancel_requested") or is_cancel_requested)
+    payload["can_cancel"] = payload.get("status") in {"pending", "running", "cancelling"}
+    return payload
+
+
+@router.post("/windows/run/{run_id}/cancel")
+async def cancel_windows_run(
+    run_id: str,
+    _user: UserInDB = Depends(get_current_user),
+) -> Dict:
+    """Request cooperative cancellation for a running Windows Sigma analysis."""
+    with _windows_run_lock:
+        record = _windows_runs.get(run_id)
+        if not record:
+            raise HTTPException(status_code=404, detail=f"No Windows analysis run found with id '{run_id}'")
+
+        status = str(record.get("status", "")).lower()
+        if status in {"complete", "failed", "cancelled"}:
+            return {
+                "status": "ignored",
+                "run_id": run_id,
+                "run_status": status,
+                "message": "Run already finished.",
+            }
+
+        _windows_cancel_requested.add(run_id)
+        record["cancel_requested"] = True
+        record["cancel_requested_at"] = datetime.now(timezone.utc).isoformat()
+        if status in {"pending", "running"}:
+            record["status"] = "cancelling"
+
+    return {
+        "status": "accepted",
+        "run_id": run_id,
+        "run_status": "cancelling",
+        "message": "Cancellation requested.",
+    }
 
 
 @router.get("/windows/iocs")

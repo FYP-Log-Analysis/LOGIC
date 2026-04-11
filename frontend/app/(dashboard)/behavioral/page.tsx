@@ -121,7 +121,7 @@ function UrlEnumTab({ data }: { data: UrlEnum[] }) {
           </div>
           {anomalies.slice(0, 20).map((a, i) => (
             <div key={i} style={{ borderBottom: "1px solid #111", padding: "8px 0", display: "flex", gap: 16 }}>
-              <span style={{ color: "#ff4444", fontFamily: "monospace", fontSize: 12 }}>{a.ip ?? a.client_ip}</span>
+              <span style={{ color: "#ff4444", fontFamily: "var(--font-mono-stack)", fontSize: 12 }}>{a.ip ?? a.client_ip}</span>
               <span style={{ color: "#808080", fontSize: 12 }}>{a.unique_paths ?? a.distinct_paths} unique paths</span>
             </div>
           ))}
@@ -264,7 +264,7 @@ function IpRiskLeaderboard({ data }: { data: BehavioralData }) {
           {top10.map(([ip, s], i) => (
             <tr key={i} style={{ borderBottom: "1px solid #0f0f0f" }}>
               <td style={{ padding: "7px 8px", color: "#333", fontSize: 10 }}>{i + 1}</td>
-              <td style={{ padding: "7px 8px", color: "#c0c0c0", fontFamily: "monospace", fontSize: 11 }}>{ip}</td>
+              <td style={{ padding: "7px 8px", color: "#c0c0c0", fontFamily: "var(--font-mono-stack)", fontSize: 11 }}>{ip}</td>
               <td style={{ padding: "7px 8px" }}>
                 <span style={{
                   color: s.score >= 10 ? "#ff4444" : s.score >= 5 ? "#ff8800" : "#f0c040",

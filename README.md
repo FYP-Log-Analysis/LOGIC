@@ -1,100 +1,98 @@
 # LOGIC
 
-LOGIC is a local-first detection and investigation platform for two telemetry modes:
+LOGIC is a local-first detection and investigation platform for two telemetry domains: web server logs and Windows event logs. The platform combines ingestion, normalization, correlation, detection, behavioral analytics, and analyst workflows in a single operational stack.
 
-1. Web server logs (Apache/Nginx style)
-2. Windows event logs (EVTX/XML)
+## 1. System Overview
 
-It combines ingestion, normalization, rule matching, behavioral analytics, and analyst workflows in one stack.
+The repository contains the following major components.
 
-## What This Repository Contains
+1. API service built with FastAPI for authentication, project lifecycle, ingestion, analysis, search, and administration.
+2. Web console built with Next.js for analyst and administrator workflows.
+3. Core processing modules for parsing, normalization, detection logic, enrichment, and storage.
+4. Runtime data store based on SQLite and project-scoped artifact files under the data directory.
+5. Agent-facing ingest endpoints for live stream submission.
 
-1. FastAPI backend for ingest, search, auth, project management, and analytics endpoints
-2. Next.js dashboard for analysts and admins
-3. Local SQLite state and per-project JSON artifacts under data
-4. Detection content for both domains:
-   - CRS-oriented web detection
-   - Sigma-oriented Windows detection
-   - Behavioral anomaly views
-5. A lightweight log sender agent used for live ingestion
+The platform supports two project types.
 
-## Core Directory Map
+1. Web projects: optimized for Apache or Nginx style traffic and CRS-oriented detection.
+2. Windows projects: optimized for EVTX or XML telemetry and Sigma-oriented detection.
 
-1. api
-   - Route handlers, auth dependencies, and service wiring
-2. core
-   - Ingestion, normalization, detection, enrichment, and storage helpers
-3. frontend
-   - Next.js app router pages, components, API proxy layer, and client store
-4. agent
-   - Downloadable sender script used by live stream workflows
-5. data
-   - Runtime data, rules, uploads, detection outputs, and logic.db
+## 2. Repository Structure
 
-## Runtime Model
+The top-level directories are organized as follows.
 
-LOGIC stores data per project. A project has uploads, and each upload has intermediate and normalized artifacts.
+1. api: FastAPI application, route modules, and service wiring.
+2. core: processing pipelines for ingestion, normalization, detection, enrichment, and export.
+3. frontend: Next.js application, dashboard views, and client-side state logic.
+4. agent: lightweight sender artifacts for ingestion workflows.
+5. data: runtime state, uploaded content, detection outputs, and rule catalogs.
 
-Typical flow:
+## 3. Execution Model
 
-1. Upload or stream raw logs
-2. Ingest raw files into intermediate structured records
-3. Normalize records by log type
-4. Run detection and analytics
-5. Serve results through API and dashboard
+All data is project scoped. Each project can contain multiple uploads. Upload processing produces intermediate and normalized artifacts, followed by analysis outputs.
 
-Important: data/projects is the source of truth for project-scoped artifacts.
+Standard processing sequence.
 
-## Requirements
+1. Receive logs from upload endpoints or agent ingest endpoints.
+2. Parse and normalize records by telemetry type.
+3. Execute detection and behavioral analytics.
+4. Persist generated results under the project data path.
+5. Serve outputs to the dashboard and API consumers.
 
-1. Python 3.11+
-2. Node.js 20+
-3. npm
-4. Optional: Docker and Docker Compose (for containerized runtime)
+## 4. Prerequisites
 
-## Quick Start (Local Dev)
+1. Python 3.11 or later.
+2. Node.js 20 or later.
+3. npm.
+4. Docker and Docker Compose for containerized deployment (optional).
 
-1. Create environment file at repository root:
-   - .env
-2. Set minimum required values:
-   - JWT_SECRET_KEY
-3. Start development stack:
-   - ./run_dev.sh
+## 5. Local Development
 
-Default local endpoints:
+Create a repository-level .env file with, at minimum, JWT_SECRET_KEY set.
+
+Start the development stack.
+
+```bash
+./run_dev.sh
+```
+
+Default development endpoints.
 
 1. Frontend: http://localhost:3000
 2. API: http://localhost:4000
-3. API OpenAPI docs: http://localhost:4000/docs
+3. OpenAPI UI: http://localhost:4000/docs
 
-## Production (Host Processes, No Docker)
+The development launcher will create a local virtual environment when needed, install dependencies, and start API and frontend processes.
 
-1. Configure .env with production-safe values:
-   - JWT_SECRET_KEY
-   - ALLOWED_ORIGINS
-2. Start production script:
-   - ./run_prod.sh
+## 6. Production Execution (Host Processes)
 
-Current behavior:
+Set production-safe environment values in .env, including JWT_SECRET_KEY and ALLOWED_ORIGINS.
 
-1. FastAPI starts with multiple workers
-2. Next.js runs in production mode
+Start production processes.
 
-## Production (Docker Compose)
+```bash
+./run_prod.sh
+```
 
-Start full container stack:
+The production launcher starts FastAPI with multiple workers and starts the Next.js frontend in production mode.
 
-1. docker compose up -d --build
+## 7. Container Deployment
 
-Container defaults:
+Start all containers.
+
+```bash
+docker compose up -d --build
+```
+
+Default container ports.
 
 1. API: 4000
 2. Frontend: 3001
 3. CRS detector: 8080
 
-## Data and Cleanup Safety
+## 8. Data Management Policy
 
-Do not remove these during normal cleanup:
+The following paths contain operational history and should be treated as persistent runtime data.
 
 1. data/projects
 2. data/crs_audit
@@ -102,60 +100,46 @@ Do not remove these during normal cleanup:
 4. data/sigma_rules
 5. data/logic.db
 
-Usually safe to remove:
+Deleting data/projects or data/logic.db removes investigation history and analysis outputs.
 
-1. Python caches (__pycache__)
-2. Recreated virtual environments (.venv)
-3. Frontend build cache (frontend/.next)
+## 9. Security and Access Control
 
-If you wipe data/projects or data/logic.db, you are deleting investigation history.
+1. Authentication is token based.
+2. Access is owner scoped for standard users and elevated for administrators.
+3. JWT secret material must be managed securely and rotated in production environments.
+4. CORS origins should be explicitly restricted in production through ALLOWED_ORIGINS.
 
-## Log Type Notes
+## 10. Documentation Set
 
-Web projects:
+Primary API documentation is available in two forms.
 
-1. Focus on HTTP request behavior, status patterns, and web detection workflows
-2. Agents page incoming logs is intended for live web stream visibility
+1. OpenAPI UI served by FastAPI at /docs.
+2. Static API reference in api/README.md.
 
-Windows projects:
+## 11. Operational Validation Checklist
 
-1. Focus on Sigma matches and Windows behavioral windows
-2. Sigma catalog is sourced from data/sigma_rules/windows and includes nested folders
+After startup, confirm the following.
 
-## Operational Checks After Startup
+1. API responds and OpenAPI page loads.
+2. Frontend authentication flow succeeds.
+3. Project list and project detail pages load expected data.
+4. Web analysis and Windows analysis endpoints return results for their respective project types.
 
-1. Confirm API health by loading /docs
-2. Log in to frontend and verify project list loads
-3. In a web project, verify incoming live logs are visible only when the agent streams data
-4. In a windows project, verify Sigma rules appear in overview grouped by folder structure
+## 12. Troubleshooting Summary
 
-## Troubleshooting
+If API startup fails.
 
-API does not start:
+1. Validate .env values.
+2. Verify dependencies were installed for root and api requirements.
+3. Check for host port conflicts.
 
-1. Check missing .env values
-2. Confirm Python dependencies are installed
-3. Check for port conflicts on 4000
+If frontend startup fails.
 
-Frontend build or lint errors:
+1. Reinstall frontend dependencies.
+2. Rebuild and review lint or type errors.
 
-1. Run npm install in frontend
-2. Re-run npm run lint and inspect file-specific hook/type violations
+If analysis output is missing.
 
-No logs shown in project views:
-
-1. Confirm active project selection
-2. Confirm upload status reached complete
-3. Confirm correct endpoint used for project type (web upload vs windows upload)
-
-## Security and Access
-
-1. Auth is token-based; project access is owner-scoped unless admin role is used
-2. Keep JWT secret private and rotate for production environments
-3. Restrict ALLOWED_ORIGINS to trusted domains in production
-
-## Development Notes
-
-1. Keep route behavior explicit per project type to avoid cross-type leakage
-2. Treat data/sigma_rules and data/crs_rules as controlled detection content
-3. Prefer additive migrations in SQLite helpers to avoid destructive resets
+1. Verify project type and endpoint alignment.
+2. Verify upload status reached completion.
+3. Verify project-scoped filters are set correctly.

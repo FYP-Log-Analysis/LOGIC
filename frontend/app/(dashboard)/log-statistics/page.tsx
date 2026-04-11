@@ -275,7 +275,7 @@ export default function LogStatisticsPage() {
                     title={ua.user_agent}>
                     {ua.user_agent || "—"}
                   </td>
-                  <td style={{ padding: "6px 8px", color: "#555", textAlign: "right", fontFamily: "monospace", fontSize: 11 }}>
+                  <td style={{ padding: "6px 8px", color: "#555", textAlign: "right", fontFamily: "var(--font-mono-stack)", fontSize: 11 }}>
                     {ua.count.toLocaleString()}
                   </td>
                 </tr>

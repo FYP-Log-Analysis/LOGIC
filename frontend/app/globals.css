@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  --font-mono-stack: 'SF Mono', 'Fira Code', 'Consolas', monospace;
   --background: #080808;
   --sidebar-bg: #0d0d0d;
   --foreground: #c0c0c0;
@@ -12,6 +13,16 @@
   --card-bg: #111111;
   --input-bg: #111111;
   --input-border: #2a2a2a;
+
+  /* Project theme accents */
+  --theme-green: #7cb342;
+  --theme-green-bg: #1a3d2a;
+  --theme-green-border: #4a7c59;
+  --theme-blue: #42a5f5;
+  --theme-blue-bg: #0d1a3d;
+  --theme-blue-border: #315b8f;
+  --theme-muted-blue: #6e8796;
+  --theme-foreground-soft: #d7e2e9;
 
   /* Severity colors */
   --severity-critical: #ff4444;
@@ -44,7 +55,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  --font-mono: var(--font-mono-stack);
 }
 
 * {
@@ -54,8 +65,15 @@
 html, body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-family: var(--font-mono-stack);
   font-size: 15px;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
 }
 
 /* Custom scrollbar */
@@ -380,7 +398,7 @@ html, body {
 
 .mitre-technique {
   color: #a0b9e0;
-  font-family: 'SF Mono', monospace;
+  font-family: var(--font-mono-stack);
 }
 
 .ioc-badge {
@@ -407,7 +425,7 @@ html, body {
 }
 
 .ioc-value {
-  font-family: 'SF Mono', monospace;
+  font-family: var(--font-mono-stack);
   font-weight: 500;
   letter-spacing: 0.2px;
 }

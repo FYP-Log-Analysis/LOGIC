@@ -132,7 +132,7 @@ export default function LoginPage() {
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#080808" }}>
       {/* Header */}
       <div style={{ textAlign: "center", marginBottom: 48 }}>
-        <div style={{ fontSize: 28, letterSpacing: 8, color: "#e0e0e0", fontWeight: 200, fontFamily: "monospace" }}>LOGIC</div>
+        <div style={{ fontSize: 28, letterSpacing: 8, color: "#e0e0e0", fontWeight: 200, fontFamily: "var(--font-mono-stack)" }}>LOGIC</div>
         <div style={{ fontSize: 10, letterSpacing: 4, color: "#333", marginTop: 6, textTransform: "uppercase" }}>
           Web Agent · Security Analysis
         </div>

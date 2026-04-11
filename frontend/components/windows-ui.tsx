@@ -9,16 +9,17 @@ interface MetricCardProps {
   label: string;
   value: string | number;
   sublabel?: string;
+  accent?: string;
 }
 
-export function WindowsMetricCard({ label, value, sublabel }: MetricCardProps) {
+export function WindowsMetricCard({ label, value, sublabel, accent = "#7cb342" }: MetricCardProps) {
   return (
     <div style={{
-      padding: 18,
+      padding: 14,
       background: "#111",
       border: "1px solid #262626",
       borderRadius: 6,
-      borderLeft: "3px solid #7cb342",
+      borderLeft: `3px solid ${accent}`,
       transition: "all 0.2s ease",
     }}>
       <div style={{
@@ -28,7 +29,7 @@ export function WindowsMetricCard({ label, value, sublabel }: MetricCardProps) {
         marginBottom: 10,
       }}>
         <span style={{
-          color: "#666",
+          color: "var(--theme-muted-blue)",
           fontSize: 11,
           textTransform: "uppercase",
           letterSpacing: 0.8,
@@ -36,7 +37,7 @@ export function WindowsMetricCard({ label, value, sublabel }: MetricCardProps) {
         }}>{label}</span>
       </div>
       <div style={{
-        fontSize: 28,
+        fontSize: 22,
         fontWeight: 600,
         letterSpacing: -0.5,
         lineHeight: 1,
@@ -46,7 +47,7 @@ export function WindowsMetricCard({ label, value, sublabel }: MetricCardProps) {
       {sublabel && <div style={{
         marginTop: 6,
         fontSize: 10,
-        color: "#777",
+        color: "#5e7180",
         letterSpacing: 0.3,
       }}>{sublabel}</div>}
     </div>
@@ -79,7 +80,7 @@ export function WindowsSectionHeader({ title, subtitle, actions }: SectionHeader
         </h1>
         {subtitle && <p style={{
           margin: "8px 0 0",
-          color: "#666",
+          color: "var(--theme-muted-blue)",
           fontSize: 12,
           lineHeight: 1.5,
           letterSpacing: 0.2,
@@ -98,27 +99,41 @@ interface DataPanelProps {
   title?: string;
   children: React.ReactNode;
   className?: string;
+  accent?: string;
+  actions?: React.ReactNode;
 }
 
-export function WindowsDataPanel({ title, children, className = "" }: DataPanelProps) {
+export function WindowsDataPanel({ title, children, className = "", accent, actions }: DataPanelProps) {
   return (
     <div style={{
       background: "#0d0d0d",
       border: "1px solid #1e1e1e",
+      borderTop: accent ? `2px solid ${accent}` : "1px solid #1e1e1e",
       borderRadius: 6,
-      padding: 20,
+      padding: 14,
       transition: "border-color 0.2s ease",
     }} className={className}>
       {title && (
-        <h3 style={{
-          margin: "0 0 16px",
-          fontSize: 12,
-          fontWeight: "bold",
-          textTransform: "uppercase",
-          letterSpacing: 0.8,
-        }}>
-          {title}
-        </h3>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            margin: "0 0 16px",
+          }}
+        >
+          <h3 style={{
+            margin: 0,
+            fontSize: 12,
+            fontWeight: "bold",
+            textTransform: "uppercase",
+            letterSpacing: 0.8,
+          }}>
+            {title}
+          </h3>
+          {actions && <div>{actions}</div>}
+        </div>
       )}
       <div style={{
         display: "flex",
@@ -140,13 +155,13 @@ export function WindowsFilterControls({ children }: FilterControlsProps) {
     <div style={{
       display: "flex",
       alignItems: "center",
-      gap: 16,
+      gap: 10,
       flexWrap: "wrap",
-      padding: 16,
-      background: "#0a0a0a",
-      border: "1px solid #1a1a1a",
+      padding: 10,
+      background: "var(--card-bg)",
+      border: "1px solid var(--border)",
       borderRadius: 6,
-      marginBottom: 20,
+      marginBottom: 16,
     }}>
       {children}
     </div>
@@ -162,21 +177,20 @@ export function FilterInput({ label, ...props }: FilterInputProps) {
     <div style={{
       display: "flex",
       alignItems: "center",
-      gap: 10,
+      gap: 8,
     }}>
       <label style={{
-        color: "#777",
-        fontSize: 11,
-        textTransform: "uppercase",
-        letterSpacing: 0.8,
+        color: "var(--muted-text)",
+        fontSize: 10,
+        letterSpacing: 0.2,
         fontWeight: 500,
         whiteSpace: "nowrap",
       }}>{label}</label>
       <input style={{
-        background: "#111",
-        border: "1px solid #2a2a2a",
-        color: "#ccc",
-        padding: "6px 10px",
+        background: "var(--input-bg)",
+        border: "1px solid var(--input-border)",
+        color: "var(--foreground)",
+        padding: "5px 8px",
         borderRadius: 4,
         fontSize: 12,
         fontFamily: "inherit",
@@ -196,21 +210,20 @@ export function FilterSelect({ label, options, ...props }: FilterSelectProps) {
     <div style={{
       display: "flex",
       alignItems: "center",
-      gap: 10,
+      gap: 8,
     }}>
       <label style={{
-        color: "#777",
-        fontSize: 11,
-        textTransform: "uppercase",
-        letterSpacing: 0.8,
+        color: "var(--muted-text)",
+        fontSize: 10,
+        letterSpacing: 0.2,
         fontWeight: 500,
         whiteSpace: "nowrap",
       }}>{label}</label>
       <select style={{
-        background: "#111",
-        border: "1px solid #2a2a2a",
-        color: "#ccc",
-        padding: "6px 10px",
+        background: "var(--input-bg)",
+        border: "1px solid var(--input-border)",
+        color: "var(--foreground)",
+        padding: "5px 8px",
         borderRadius: 4,
         fontSize: 12,
         fontFamily: "inherit",
@@ -239,8 +252,8 @@ export function WindowsButton({
   ...props 
 }: WindowsButtonProps) {
   const variantStyles = {
-    primary: { background: "#7cb342", color: "#000" },
-    secondary: { background: "#2a2a2a", color: "#c0c0c0" },
+    primary: { background: "var(--theme-green-bg)", color: "var(--theme-green)", border: "1px solid var(--theme-green-border)" },
+    secondary: { background: "var(--theme-blue-bg)", color: "var(--theme-blue)", border: "1px solid var(--theme-blue-border)" },
     danger: { background: "#ff4444", color: "#000" },
   };
 
@@ -248,13 +261,12 @@ export function WindowsButton({
     <button
       style={{
         ...variantStyles[variant],
-        padding: "8px 16px",
-        border: "none",
+        padding: "7px 12px",
+        border: variantStyles[variant].border ?? "none",
         borderRadius: 4,
-        fontSize: 11,
-        fontWeight: "bold",
-        letterSpacing: 0.8,
-        textTransform: "uppercase",
+        fontSize: 12,
+        fontWeight: 600,
+        letterSpacing: 0.2,
         cursor: disabled || loading ? "not-allowed" : "pointer",
         transition: "all 0.2s ease",
         opacity: disabled || loading ? 0.6 : 1,
@@ -267,14 +279,65 @@ export function WindowsButton({
   );
 }
 
-interface EventTableProps {
-  columns: Array<{ key: string; label: string; width?: string }>;
-  data: Array<Record<string, any>>;
-  onRowClick?: (row: any, index: number) => void;
-  emptyMessage?: string;
+type TableSortDirection = "asc" | "desc";
+
+interface EventTableColumn {
+  key: string;
+  label: string;
+  width?: string;
+  sortable?: boolean;
+  render?: (row: Record<string, unknown>, rowIndex: number) => React.ReactNode;
 }
 
-export function WindowsEventTable({ columns, data, onRowClick, emptyMessage = "No events found" }: EventTableProps) {
+interface EventTableProps {
+  columns: EventTableColumn[];
+  data: Array<Record<string, unknown>>;
+  onRowClick?: (row: Record<string, unknown>, index: number) => void;
+  selectedRowIndex?: number;
+  selectedRowKey?: string;
+  rowKey?: (row: Record<string, unknown>, index: number) => string;
+  emptyMessage?: string;
+  maxHeight?: number;
+  stickyHeader?: boolean;
+  density?: "comfortable" | "compact";
+  sortKey?: string;
+  sortDirection?: TableSortDirection;
+  onSortChange?: (key: string, direction: TableSortDirection) => void;
+}
+
+export function WindowsEventTable({
+  columns,
+  data,
+  onRowClick,
+  selectedRowIndex,
+  selectedRowKey,
+  rowKey,
+  emptyMessage = "No events found",
+  maxHeight,
+  stickyHeader = true,
+  density = "comfortable",
+  sortKey,
+  sortDirection,
+  onSortChange,
+}: EventTableProps) {
+  const cellPadding = density === "compact" ? "5px 8px" : "10px 12px";
+
+  const resolveRowKey = (row: Record<string, unknown>, idx: number): string => {
+    if (rowKey) return rowKey(row, idx);
+    const explicitKey = row.id;
+    if (typeof explicitKey === "string" || typeof explicitKey === "number") {
+      return String(explicitKey);
+    }
+    return String(idx);
+  };
+
+  const handleSortClick = (col: EventTableColumn) => {
+    if (!col.sortable || !onSortChange) return;
+    const isSameKey = sortKey === col.key;
+    const nextDirection: TableSortDirection = isSameKey && sortDirection === "asc" ? "desc" : "asc";
+    onSortChange(col.key, nextDirection);
+  };
+
   if (data.length === 0) {
     return (
       <div style={{
@@ -288,7 +351,7 @@ export function WindowsEventTable({ columns, data, onRowClick, emptyMessage = "N
   }
 
   return (
-    <div style={{ overflowX: "auto" }}>
+    <div style={{ overflowX: "auto", maxHeight: maxHeight ? `${maxHeight}px` : undefined, overflowY: maxHeight ? "auto" : undefined }}>
       <table style={{
         width: "100%",
         borderCollapse: "collapse",
@@ -300,47 +363,85 @@ export function WindowsEventTable({ columns, data, onRowClick, emptyMessage = "N
             background: "#0a0a0a",
           }}>
             {columns.map((col) => (
-              <th key={col.key} style={{ 
+              <th key={col.key} style={{
                 width: col.width,
-                padding: "10px 12px",
+                padding: cellPadding,
                 textAlign: "left",
                 fontSize: 10,
                 fontWeight: "bold",
                 color: "#777",
                 textTransform: "uppercase",
                 letterSpacing: 0.8,
+                position: stickyHeader ? "sticky" : "static",
+                top: stickyHeader ? 0 : undefined,
+                zIndex: stickyHeader ? 2 : undefined,
+                background: "#0a0a0a",
               }}>
-                {col.label}
+                <button
+                  type="button"
+                  onClick={() => handleSortClick(col)}
+                  disabled={!col.sortable || !onSortChange}
+                  style={{
+                    border: "none",
+                    background: "transparent",
+                    color: "inherit",
+                    cursor: col.sortable && onSortChange ? "pointer" : "default",
+                    padding: 0,
+                    margin: 0,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    font: "inherit",
+                    letterSpacing: "inherit",
+                    textTransform: "inherit",
+                  }}
+                >
+                  <span>{col.label}</span>
+                  {col.sortable && (
+                    <span style={{ color: sortKey === col.key ? "#9ed26f" : "#4f4f4f", fontSize: 9 }}>
+                      {sortKey === col.key ? (sortDirection === "asc" ? "▲" : "▼") : "↕"}
+                    </span>
+                  )}
+                </button>
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {data.map((row, idx) => (
-            <tr
-              key={idx}
-              onClick={() => onRowClick?.(row, idx)}
-              style={{
-                borderBottom: "1px solid #1a1a1a",
-                background: idx % 2 === 0 ? "#111" : "#0d0d0d",
-                cursor: onRowClick ? "pointer" : "default",
-                transition: "background 0.2s ease",
-              }}
-              onMouseEnter={(e) => {
-                if (onRowClick) e.currentTarget.style.background = "#1a1a1a";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = idx % 2 === 0 ? "#111" : "#0d0d0d";
-              }}
-            >
-              {columns.map((col) => (
-                <td key={col.key} style={{
-                  padding: "10px 12px",
-                  color: "#c0c0c0",
-                }}>{row[col.key] ?? "—"}</td>
-              ))}
-            </tr>
-          ))}
+          {data.map((row, idx) => {
+            const resolvedKey = resolveRowKey(row, idx);
+            const isSelected = selectedRowKey != null ? selectedRowKey === resolvedKey : selectedRowIndex === idx;
+            const defaultRowBg = isSelected ? "#1f2a16" : idx % 2 === 0 ? "#111" : "#0d0d0d";
+
+            return (
+              <tr
+                key={resolvedKey}
+                onClick={() => onRowClick?.(row, idx)}
+                style={{
+                  borderBottom: "1px solid #1a1a1a",
+                  background: defaultRowBg,
+                  cursor: onRowClick ? "pointer" : "default",
+                  transition: "background 0.2s ease",
+                }}
+                onMouseEnter={(e) => {
+                  if (onRowClick && !isSelected) e.currentTarget.style.background = "#171717";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = defaultRowBg;
+                }}
+              >
+                {columns.map((col) => (
+                  <td key={col.key} style={{
+                    padding: cellPadding,
+                    color: "#c0c0c0",
+                    verticalAlign: "top",
+                  }}>
+                    {col.render ? col.render(row, idx) : (row[col.key] as React.ReactNode) ?? "—"}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -526,7 +627,7 @@ export function IoCBadge({ type, value, onClick }: IoCBadgeProps) {
       }}>{type.toUpperCase()}</span>
       <span style={{ 
         color: "#c0c0c0",
-        fontFamily: "monospace",
+        fontFamily: "var(--font-mono-stack)",
       }}>{value}</span>
     </span>
   );

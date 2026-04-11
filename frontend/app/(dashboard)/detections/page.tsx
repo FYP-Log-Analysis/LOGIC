@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 import { getRuleMatches, getDetectionAggregations, type DetectionAggregations } from "@/lib/client";
 import { useAuthStore } from "@/lib/store";
@@ -15,8 +16,6 @@ import {
 import BarChart from "@/components/charts/bar-chart";
 import PieChart from "@/components/charts/pie-chart";
 import LineChart from "@/components/charts/line-chart";
-import { ThreatTimeline, type ThreatEvent } from "@/components/threat-timeline";
-import { EventDetailModal } from "@/components/event-detail-modal";
 import { WindowsEventTable } from "@/components/windows-ui";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -495,7 +494,6 @@ export default function DetectionsPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("Overview Charts");
   const [triageMap, setTriageMap] = useState<Record<string, TriageStatus>>({});
-  const [selectedTimelineEvent, setSelectedTimelineEvent] = useState<ThreatEvent | null>(null);
   const { activeProject, timeRange } = useAuthStore();
   const scope = { projectId: activeProject?.id, startTs: timeRange?.from, endTs: timeRange?.to };
 
@@ -575,26 +573,6 @@ export default function DetectionsPage() {
     Object.keys(agg.hourly_timeline).length > 0
   );
 
-  const timelineEvents: ThreatEvent[] = matches.map((match) => {
-    const sev = (match.severity ?? "low").toLowerCase();
-    const severity: ThreatEvent["severity"] =
-      sev === "critical" || sev === "high"
-        ? "critical"
-        : sev === "medium"
-          ? "warning"
-          : "info";
-
-    return {
-      timestamp: match.timestamp || new Date().toISOString(),
-      severity,
-      type: "detection",
-      title: match.rule_title || match.rule_id || "Rule match",
-      details: `${match.client_ip || "unknown ip"} | ${match.method || "-"} ${match.path || "-"} | status ${match.status_code || "-"}`,
-      source: "rule-detection",
-      payload: match,
-    };
-  });
-
   return (
     <div>
       <SectionHeader
@@ -635,24 +613,26 @@ export default function DetectionsPage() {
       {tab === "Overview Charts" && agg && hasOverviewData && <OverviewCharts agg={agg} />}
       {tab === "Detected Threats" && (
         <>
-          <div style={{ marginBottom: 16 }}>
-            <ThreatTimeline
-              events={timelineEvents}
-              height={280}
-              onEventClick={(event) => setSelectedTimelineEvent(event)}
-            />
+          <div style={{ margin: "8px 0 14px", display: "flex", justifyContent: "flex-end" }}>
+            <Link
+              href="/threat-timeline"
+              style={{
+                color: "#7cb342",
+                border: "1px solid #2f4a20",
+                background: "#111",
+                borderRadius: 3,
+                padding: "6px 10px",
+                fontSize: 10,
+                letterSpacing: 0.7,
+                textTransform: "uppercase",
+                textDecoration: "none",
+              }}
+            >
+              Open Threat Timeline Page
+            </Link>
           </div>
           <ThreatTable matches={matches} triageMap={triageMap} onTriageChange={handleTriageChange} />
         </>
-      )}
-
-      {selectedTimelineEvent && (
-        <EventDetailModal
-          title={selectedTimelineEvent.title}
-          subtitle={`${selectedTimelineEvent.severity.toUpperCase()} · ${selectedTimelineEvent.type.toUpperCase()} · ${new Date(selectedTimelineEvent.timestamp).toLocaleString()}`}
-          payload={selectedTimelineEvent.payload ?? selectedTimelineEvent}
-          onClose={() => setSelectedTimelineEvent(null)}
-        />
       )}
     </div>
   );

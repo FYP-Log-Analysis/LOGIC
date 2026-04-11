@@ -251,7 +251,7 @@ export function WindowsButton({
   disabled,
   ...props 
 }: WindowsButtonProps) {
-  const variantStyles = {
+  const variantStyles: Record<NonNullable<WindowsButtonProps["variant"]>, { background: string; color: string; border?: string }> = {
     primary: { background: "var(--theme-green-bg)", color: "var(--theme-green)", border: "1px solid var(--theme-green-border)" },
     secondary: { background: "var(--theme-blue-bg)", color: "var(--theme-blue)", border: "1px solid var(--theme-blue-border)" },
     danger: { background: "#ff4444", color: "#000" },

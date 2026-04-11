@@ -475,7 +475,7 @@ export default function WindowsAnalysisPage() {
             return (
               <div style={{ display: "grid", gap: 4 }}>
                 <div style={{ color: "#d2d2d2", fontSize: 12 }}>{value}</div>
-                {row.rule_id && <div style={{ color: "#676767", fontSize: 10 }}>{String(row.rule_id)}</div>}
+                {Boolean(row.rule_id) && <div style={{ color: "#676767", fontSize: 10 }}>{String(row.rule_id)}</div>}
               </div>
             );
           },

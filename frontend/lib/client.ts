@@ -2,6 +2,15 @@ import { apiGet, apiPost, apiDelete, apiUpload } from "./api";
 
 export type ProjectType = "web" | "windows";
 
+export interface ProjectSummary {
+  id: string;
+  name?: string;
+  description?: string;
+  status?: string;
+  last_run_at?: string;
+  project_type: ProjectType;
+}
+
 // ── Shared scope options ──────────────────────────────────────────────────────
 export interface ScopeOpts {
   projectId?: string;
@@ -210,16 +219,29 @@ export async function getIpSummary(clientIp: string) {
 // ── Projects ─────────────────────────────────────────────────────────────────
 
 export async function getProjects() {
+  type RawProject = {
+    id: string;
+    name?: string;
+    description?: string;
+    status?: string;
+    last_run_at?: string;
+    project_type?: ProjectType | string;
+  };
+
   const result = await apiGet<
-    | Array<{ id: string; name?: string; description?: string; status?: string; last_run_at?: string; project_type?: ProjectType }>
-    | { projects: Array<{ id: string; name?: string; description?: string; status?: string; last_run_at?: string; project_type?: ProjectType }> }
+    | RawProject[]
+    | { projects: RawProject[] }
   >("api/projects");
   const raw = Array.isArray(result)
     ? result
-    : (result as unknown as { projects: Array<{ id: string; name?: string; description?: string; status?: string; last_run_at?: string; project_type?: ProjectType }> }).projects ?? [];
+    : result.projects ?? [];
 
-  return raw.map((project) => ({
-    ...project,
+  return raw.map<ProjectSummary>((project) => ({
+    id: project.id,
+    name: project.name,
+    description: project.description,
+    status: project.status,
+    last_run_at: project.last_run_at,
     project_type: project.project_type === "windows" ? "windows" : "web",
   }));
 }
@@ -542,7 +564,7 @@ export async function getWindowsIOCs(opts?: Pick<ScopeOpts, "projectId" | "uploa
 export interface WindowsCorrelation {
   chains: Array<{
     chain_id: string;
-    events: any[];
+    events: Array<Record<string, unknown>>;
     start_time: string;
     end_time: string;
     computers: string[];

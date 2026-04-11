@@ -23,10 +23,10 @@ import { EventDetailModal } from "@/components/event-detail-modal";
 function heatColor(count: number, maxCount: number): string {
   if (maxCount === 0 || count === 0) return "#111";
   const ratio = count / maxCount;
-  if (ratio > 0.75) return "#2d2d2d";
-  if (ratio > 0.5) return "#252525";
-  if (ratio > 0.25) return "#1f1f1f";
-  return "#181818";
+  if (ratio > 0.75) return "#315b8f";
+  if (ratio > 0.5) return "#2a4c74";
+  if (ratio > 0.25) return "#1f3a59";
+  return "#16283c";
 }
 
 function formatUptime(totalSeconds: number): string {
@@ -99,15 +99,16 @@ interface MicroTileProps {
   label: string;
   value: string | number;
   sub?: string;
+  accent?: string;
 }
 
-function MicroTile({ label, value, sub }: MicroTileProps) {
+function MicroTile({ label, value, sub, accent = "#4a7c59" }: MicroTileProps) {
   return (
     <div
       style={{
-        border: "1px solid #1f2f23",
-        borderLeft: "2px solid #4a7c59",
-        background: "linear-gradient(180deg, #121814 0%, #101410 100%)",
+        border: "1px solid #262626",
+        borderLeft: `2px solid ${accent}`,
+        background: "#111",
         borderRadius: 4,
         padding: "10px 12px",
         minHeight: 72,
@@ -116,10 +117,10 @@ function MicroTile({ label, value, sub }: MicroTileProps) {
       <div style={{ fontSize: 10, letterSpacing: 0.9, textTransform: "uppercase", color: "#6e8796", marginBottom: 8 }}>
         {label}
       </div>
-      <div style={{ fontSize: 22, lineHeight: 1.1, color: "#d7e2e9", fontWeight: 300 }}>
+      <div style={{ fontSize: 22, lineHeight: 1.1, color: "#d0d0d0", fontWeight: 300 }}>
         {typeof value === "number" ? value.toLocaleString() : value}
       </div>
-      {sub && <div style={{ marginTop: 6, fontSize: 11, color: "#5f7380" }}>{sub}</div>}
+      {sub && <div style={{ marginTop: 6, fontSize: 11, color: "#666" }}>{sub}</div>}
     </div>
   );
 }
@@ -156,7 +157,7 @@ function WorkflowStep({ idx, text }: WorkflowStepProps) {
       >
         {idx}
       </div>
-      <div style={{ fontSize: 12, color: "#d7e2e9", lineHeight: 1.45 }}>{text}</div>
+      <div style={{ fontSize: 12, color: "#c8c8c8", lineHeight: 1.45 }}>{text}</div>
     </div>
   );
 }
@@ -486,9 +487,12 @@ export default function OverviewPage() {
       >
         <div
           style={{
-            border: "1px solid #1f2f23",
+            borderLeft: "1px solid #1e1e1e",
+            borderRight: "1px solid #1e1e1e",
+            borderBottom: "1px solid #1e1e1e",
+            borderTop: "2px solid #2f4a38",
             borderRadius: 6,
-            background: "linear-gradient(180deg, #121814 0%, #0e120e 100%)",
+            background: "linear-gradient(180deg, #111611 0%, #0d0d0d 100%)",
             padding: 12,
           }}
         >
@@ -500,24 +504,34 @@ export default function OverviewPage() {
               label={isWindowsProject ? "Sigma Rules" : "Rule Matches"}
               value={summaryLeftPrimary}
               sub={isWindowsProject ? "Loaded rule catalog" : "CRS/WAF detections"}
+              accent="#4a7c59"
             />
             <MicroTile
               label={isWindowsProject ? "Rule Matches" : "Unique Rules"}
               value={summaryLeftSecondary}
               sub={isWindowsProject ? "Current project results" : "Triggered in current scope"}
+              accent="#315b8f"
             />
-            <MicroTile label="Mode" value={summaryModeText} sub="Detection mapping" />
-            <MicroTile label="Project Type" value={isWindowsProject ? "WINDOWS" : "WEB"} sub="Active scope" />
-            <MicroTile label="Agent Status" value={(monitor?.status ?? "idle").toUpperCase()} sub="Live collector state" />
-            <MicroTile label="Uptime" value={formatUptime(monitor?.uptime_seconds ?? 0)} sub="Collector runtime" />
+            <MicroTile label="Mode" value={summaryModeText} sub="Detection mapping" accent="#4a4a4a" />
+            <MicroTile label="Project Type" value={isWindowsProject ? "WINDOWS" : "WEB"} sub="Active scope" accent="#4a4a4a" />
+            <MicroTile
+              label="Agent Status"
+              value={(monitor?.status ?? "idle").toUpperCase()}
+              sub="Live collector state"
+              accent={monitor?.status === "active" ? "#4a7c59" : "#3a3a3a"}
+            />
+            <MicroTile label="Uptime" value={formatUptime(monitor?.uptime_seconds ?? 0)} sub="Collector runtime" accent="#315b8f" />
           </div>
         </div>
 
         <div
           style={{
-            border: "1px solid #1c2c3f",
+            borderLeft: "1px solid #1e1e1e",
+            borderRight: "1px solid #1e1e1e",
+            borderBottom: "1px solid #1e1e1e",
+            borderTop: "2px solid #2e4566",
             borderRadius: 6,
-            background: "linear-gradient(180deg, #101725 0%, #0d121c 100%)",
+            background: "linear-gradient(180deg, #101725 0%, #0d0d0d 100%)",
             padding: 12,
           }}
         >
@@ -551,16 +565,19 @@ export default function OverviewPage() {
       <div
         style={{
           marginTop: 10,
-          border: "1px solid #1f2f23",
+          borderLeft: "1px solid #1e1e1e",
+          borderRight: "1px solid #1e1e1e",
+          borderBottom: "1px solid #1e1e1e",
+          borderTop: "2px solid #2f4a38",
           borderRadius: 4,
-          background: "#0d1410",
+          background: "linear-gradient(180deg, #101410 0%, #0d0d0d 100%)",
           padding: "10px 12px",
         }}
       >
         <div style={{ fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: "#7fa8bf", marginBottom: 6 }}>
           Threat Detection Guide
         </div>
-        <div style={{ fontSize: 12, color: "#d7e2e9", lineHeight: 1.6, maxWidth: 920 }}>
+        <div style={{ fontSize: 12, color: "#c8c8c8", lineHeight: 1.6, maxWidth: 920 }}>
           {isWindowsProject ? (
             <>
               1. .evtx logs are normalized into structured events.
@@ -920,10 +937,10 @@ export default function OverviewPage() {
   const hasTimestamps = hourCounts.some((c) => c > 0);
 
   const statusColors: Record<string, string> = {
-    "2xx": "#d8d8d8",
-    "3xx": "#bdbdbd",
-    "4xx": "#9e9e9e",
-    "5xx": "#7f7f7f",
+    "2xx": "#4caf50",
+    "3xx": "#4488ff",
+    "4xx": "#f0c040",
+    "5xx": "#ff4444",
     other: "#666",
   };
 
@@ -964,8 +981,8 @@ export default function OverviewPage() {
         >
           <MetricCard label="Total Entries" value={total_entries.toLocaleString()} />
           {!isWindowsProject && <MetricCard label="Unique IPs" value={unique_ips.toLocaleString()} />}
-          {!isWindowsProject && <MetricCard label="Bot Requests" value={bot_count.toLocaleString()} accent="#a5a5a5" />}
-          {!isWindowsProject && <MetricCard label="Human Requests" value={human_count.toLocaleString()} accent="#d0d0d0" />}
+          {!isWindowsProject && <MetricCard label="Bot Requests" value={bot_count.toLocaleString()} accent="#ff8800" />}
+          {!isWindowsProject && <MetricCard label="Human Requests" value={human_count.toLocaleString()} accent="#42a5f5" />}
           {isWindowsProject && <MetricCard label="Top Path Hits" value={topPathCount.toLocaleString()} sub="Most requested endpoint volume" accent="#707070" />}
         </div>
 
@@ -1011,7 +1028,7 @@ export default function OverviewPage() {
               title="Bot vs Human"
               labels={["Human", "Bot"]}
               values={[human_count, bot_count]}
-              colors={["#cfcfcf", "#8f8f8f"]}
+              colors={["#42a5f5", "#ff8800"]}
               height={210}
             />
           )}
@@ -1026,7 +1043,7 @@ export default function OverviewPage() {
             title="Top Requested Paths"
             labels={top_paths.map((p) => p.request_path.length > 48 ? p.request_path.slice(0, 48) + "..." : p.request_path)}
             values={top_paths.map((p) => p.count)}
-            color="#606060"
+            color="#4a7a4a"
             horizontal
           />
         )}
@@ -1036,7 +1053,7 @@ export default function OverviewPage() {
             title="Top Source IPs"
             labels={top_ips.map((p) => p.client_ip)}
             values={top_ips.map((p) => p.request_count)}
-            color="#484848"
+            color="#5a7a9a"
             horizontal
           />
         )}
@@ -1069,7 +1086,7 @@ export default function OverviewPage() {
           )}
           {!eventExplainError && !eventExplanation && (
             <div style={{ color: "#777", fontSize: 12 }}>
-              Click "Explain With Groq" to generate a concise security interpretation.
+              Click &quot;Explain With Groq&quot; to generate a concise security interpretation.
             </div>
           )}
           {eventExplanation && (

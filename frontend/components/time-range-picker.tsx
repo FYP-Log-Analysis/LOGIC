@@ -14,13 +14,16 @@ export interface TimeRangePickerProps {
   disabled?: boolean;
 }
 
+type TimePreset = NonNullable<TimeRange["preset"]>;
+const PRESETS: TimePreset[] = ["1h", "24h", "7d", "custom"];
+
 export function TimeRangePicker({ onRangeChange, initialRange, disabled }: TimeRangePickerProps) {
-  const [preset, setPreset] = useState<string>(initialRange?.preset || "24h");
+  const [preset, setPreset] = useState<TimePreset>(initialRange?.preset ?? "24h");
   const [startTs, setStartTs] = useState(initialRange?.startTs || "");
   const [endTs, setEndTs] = useState(initialRange?.endTs || "");
   const [showCustom, setShowCustom] = useState(initialRange?.preset === "custom");
 
-  const getTimeRangeFromPreset = (p: string): [string, string] => {
+  const getTimeRangeFromPreset = (p: TimePreset): [string, string] => {
     const now = new Date();
     const end = now.toISOString();
 
@@ -37,7 +40,7 @@ export function TimeRangePicker({ onRangeChange, initialRange, disabled }: TimeR
     return ["", ""];
   };
 
-  const handlePresetClick = (p: string) => {
+  const handlePresetClick = (p: TimePreset) => {
     setPreset(p);
     setShowCustom(false);
 
@@ -49,7 +52,7 @@ export function TimeRangePicker({ onRangeChange, initialRange, disabled }: TimeR
     const [start, end] = getTimeRangeFromPreset(p);
     setStartTs(start);
     setEndTs(end);
-    onRangeChange({ startTs: start, endTs: end, preset: p as any });
+    onRangeChange({ startTs: start, endTs: end, preset: p });
   };
 
   const handleCustomApply = () => {
@@ -75,7 +78,7 @@ export function TimeRangePicker({ onRangeChange, initialRange, disabled }: TimeR
         Time Range:
       </span>
 
-      {["1h", "24h", "7d", "custom"].map((p) => (
+      {PRESETS.map((p) => (
         <button
           key={p}
           onClick={() => handlePresetClick(p)}

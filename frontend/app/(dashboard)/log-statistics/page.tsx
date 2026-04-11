@@ -34,24 +34,22 @@ export default function LogStatisticsPage() {
   const [uploadId, setUploadId] = useState<string | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
   const { activeProject } = useAuthStore();
+  const projectId = activeProject?.id;
+  const projectType = activeProject?.project_type;
 
   useEffect(() => {
-    if (activeProject?.project_type === "windows") {
+    if (projectType === "windows") {
       router.replace("/overview");
     }
-  }, [activeProject?.project_type, router]);
-
-  if (activeProject?.project_type === "windows") {
-    return null;
-  }
+  }, [projectType, router]);
 
   // Load available uploads whenever the active project changes
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setUploadId(null);
       setUploads([]);
-      if (!activeProject?.id) return;
-      getProjectUploads(activeProject.id)
+      if (!projectId || projectType === "windows") return;
+      getProjectUploads(projectId)
         .then((rows) => {
           const completed = rows.filter((r) => r.status === "complete" && r.stage === "saved");
           setUploads(completed);
@@ -60,21 +58,25 @@ export default function LogStatisticsPage() {
         .catch(() => {});
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [activeProject?.id]);
+  }, [projectId, projectType]);
 
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const loadData = useCallback(() => {
-    if (!activeProject?.id) { setLoading(false); return; }
+    if (!projectId || projectType === "windows") {
+      setStats(null);
+      setStatsError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setStatsError(null);
-    getLogStatistics({ projectId: activeProject.id, uploadId: uploadId ?? undefined })
+    getLogStatistics({ projectId, uploadId: uploadId ?? undefined })
       .then((d) => setStats(d))
       .catch((err) => {
         setStats(null);
         setStatsError(err instanceof Error ? err.message : "No statistics available for this project.");
       })
       .finally(() => setLoading(false));
-  }, [activeProject?.id, uploadId]);
+  }, [projectId, projectType, uploadId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -82,6 +84,10 @@ export default function LogStatisticsPage() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loadData]);
+
+  if (projectType === "windows") {
+    return null;
+  }
 
   // Upload selector UI
   const uploadSelector = uploads.length > 1 ? (
@@ -105,7 +111,7 @@ export default function LogStatisticsPage() {
     </div>
   ) : null;
 
-  if (!activeProject?.id) {
+  if (!projectId) {
     return (
       <div style={{ textAlign: "center", padding: 60, color: "#555" }}>
         Select a project from the sidebar to view log statistics.

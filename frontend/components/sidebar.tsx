@@ -9,18 +9,33 @@ type SidebarProps = {
   onHide?: () => void;
 };
 
-const NAV_SHARED = [
+type NavItem = {
+  key: string;
+  href: string;
+  label: string;
+  analystOnly?: boolean;
+  adminOnly?: boolean;
+  webOnly?: boolean;
+};
+
+const NAV_SHARED: NavItem[] = [
   { key: "projects", href: "/projects", label: "Projects", analystOnly: true },
   { key: "overview", href: "/overview", label: "Overview", analystOnly: true },
   { key: "agents", href: "/agents", label: "Agents", analystOnly: true, webOnly: true }, // Only for web projects
 ];
 
-const NAV_WEB = [
+const NAV_WEB: NavItem[] = [
   { key: "analysis", href: "/analysis", label: "Web Analysis", analystOnly: true },
   {
     key: "detections",
     href: "/detections",
     label: "Web Detections",
+    analystOnly: true,
+  },
+  {
+    key: "threat-timeline",
+    href: "/threat-timeline",
+    label: "Threat Timeline",
     analystOnly: true,
   },
   {
@@ -31,7 +46,7 @@ const NAV_WEB = [
   },
 ];
 
-const NAV_WINDOWS = [
+const NAV_WINDOWS: NavItem[] = [
   { key: "windows-agents", href: "/windows-agents", label: "Windows Agents", analystOnly: true },
   { key: "windows-analysis", href: "/windows-analysis", label: "Rule Based Detection", analystOnly: true },
   { key: "rules-setup", href: "/rules-setup", label: "Rules Setup", analystOnly: true },
@@ -43,7 +58,7 @@ const NAV_WINDOWS = [
   },
 ];
 
-const NAV_COMMON = [
+const NAV_COMMON: NavItem[] = [
   {
     key: "threat-actor",
     href: "/threat-actor",

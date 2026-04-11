@@ -111,6 +111,9 @@ export default function WindowsBehavioralPage() {
     return dt.toISOString();
   };
 
+  const selectedUploadId = result?.upload_id;
+  const selectedWindowMinutes = result?.window_minutes;
+
   const loadLatest = useCallback(async (projectId: string) => {
     setLoading(true);
     setError("");
@@ -146,7 +149,7 @@ export default function WindowsBehavioralPage() {
   }, [result?.windows]);
 
   useEffect(() => {
-    if (!activeProject?.id || !result || !selectedWindowStart) return;
+    if (!activeProject?.id || !selectedUploadId || !selectedWindowMinutes || !selectedWindowStart) return;
 
     let cancelled = false;
     setSelectedWindowLoading(true);
@@ -154,9 +157,9 @@ export default function WindowsBehavioralPage() {
 
     getWindowsBehavioralWindowEvents({
       projectId: activeProject.id,
-      uploadId: result.upload_id,
+      uploadId: selectedUploadId,
       windowStart: selectedWindowStart,
-      windowMinutes: result.window_minutes,
+      windowMinutes: selectedWindowMinutes,
       limit: 250,
     })
       .then((payload) => {
@@ -177,14 +180,16 @@ export default function WindowsBehavioralPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeProject?.id, result?.upload_id, result?.window_minutes, selectedWindowStart]);
+  }, [activeProject?.id, selectedUploadId, selectedWindowMinutes, selectedWindowStart]);
 
   const handleRun = async () => {
+    if (!activeProject?.id) return;
+
     setRunning(true);
     setError("");
     try {
       await runWindowsBehavioralAnalysis({
-        project_id: activeProject?.id,
+        project_id: activeProject.id,
         window_minutes: windowMinutes,
         start_ts: toIsoOrUndefined(startTs),
         end_ts: toIsoOrUndefined(endTs),

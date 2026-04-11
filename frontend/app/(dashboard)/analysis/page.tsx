@@ -45,29 +45,14 @@ export default function AnalysisPage() {
   const [error, setError] = useState("");
   const { activeProject, timeRange: storeTimeRange } = useAuthStore();
 
-  // Only allow web projects on this page
-  if (activeProject && activeProject.project_type === "windows") {
-    return (
-      <div style={{ textAlign: "center", padding: "60px", color: "#ff6b6b" }}>
-        <h2 style={{ margin: 0, color: "#ff6b6b" }}>Web Projects Only</h2>
-        <p style={{ color: "#999", marginTop: "12px" }}>
-          This is a WEB log analysis page. Your active project is a WINDOWS project.
-        </p>
-        <p style={{ color: "#666", fontSize: "12px", marginTop: "8px" }}>
-          Go to Windows Forensics Analysis for Windows EVTX logs.
-        </p>
-      </div>
-    );
-  }
-
   useEffect(() => {
-    if (!activeProject?.id) return;
+    if (!activeProject?.id || activeProject.project_type === "windows") return;
     (getLogTimeRange(activeProject?.id) as Promise<TimeRange>).then((d) => setTimeRange(d)).catch(() => {});
     // Restore the last completed run on mount (survives page refresh)
     (getLatestAnalysisRun(activeProject?.id) as Promise<RunResult>)
       .then((r) => { if (r?.status === "complete") setResult(r); })
       .catch(() => {});
-  }, [activeProject?.id]);
+  }, [activeProject?.id, activeProject?.project_type]);
 
   const pollRun = useCallback(async (runId: string) => {
     setPolling(true);
@@ -89,6 +74,7 @@ export default function AnalysisPage() {
   }, []);
 
   const handleRun = async () => {
+    if (!activeProject?.id || activeProject.project_type === "windows") return;
     setRunning(true); setError(""); setResult(null);
     try {
       const r = await runAnalysis({
@@ -123,6 +109,20 @@ export default function AnalysisPage() {
       Select a project from the sidebar to view this page.
     </div>
   );
+
+  if (activeProject.project_type === "windows") {
+    return (
+      <div style={{ textAlign: "center", padding: "60px", color: "#ff6b6b" }}>
+        <h2 style={{ margin: 0, color: "#ff6b6b" }}>Web Projects Only</h2>
+        <p style={{ color: "#999", marginTop: "12px" }}>
+          This is a WEB log analysis page. Your active project is a WINDOWS project.
+        </p>
+        <p style={{ color: "#666", fontSize: "12px", marginTop: "8px" }}>
+          Go to Windows Forensics Analysis for Windows EVTX logs.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div>

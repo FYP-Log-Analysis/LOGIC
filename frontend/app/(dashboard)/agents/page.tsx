@@ -334,7 +334,7 @@ export default function AgentsPage() {
 
             {selectedProject?.project_type === "windows" && !monitor?.has_traffic && (
               <div style={{ color: "#888", fontSize: 12, border: "1px dashed #1e1e1e", borderRadius: 4, padding: 12, marginBottom: 10 }}>
-                No Windows agent traffic observed yet. Use "RUN CONNECTIVITY TEST" to verify project ID/API key/path wiring, then check the NXLog service status and connectivity from the Windows host.
+                No Windows agent traffic observed yet. Use &quot;RUN CONNECTIVITY TEST&quot; to verify project ID/API key/path wiring, then check the NXLog service status and connectivity from the Windows host.
               </div>
             )}
 

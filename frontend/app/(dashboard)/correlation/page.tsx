@@ -9,7 +9,6 @@ import {
   Btn,
   Spinner,
   StatusBadge,
-  Badge,
 } from "@/components/ui-primitives";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -64,24 +63,6 @@ function cellColor(count: number, max: number): string {
   const g = Math.round(17 + t * (76 - 17));
   const b = Math.round(23 + t * (76 - 23));
   return `rgb(${r},${g},${b})`;
-}
-
-function getCrsCategory(ruleId?: string, ruleTitle?: string): string {
-  const title = (ruleTitle ?? "").toLowerCase();
-  if (title.includes("sql")) return "SQLi";
-  if (title.includes("xss") || title.includes("cross-site")) return "XSS";
-  if (title.includes("lfi") || title.includes("local file")) return "LFI";
-  if (title.includes("rfi") || title.includes("remote file")) return "RFI";
-  if (title.includes("rce") || title.includes("remote code")) return "RCE";
-  if (title.includes("php")) return "PHP Inject";
-  if (title.includes("scan") || title.includes("crawler") || title.includes("dos")) return "Scanner";
-  const id = parseInt(ruleId ?? "0");
-  if (id >= 941000 && id < 942000) return "XSS";
-  if (id >= 942000 && id < 943000) return "SQLi";
-  if (id >= 930000 && id < 931000) return "LFI";
-  if (id >= 931000 && id < 932000) return "RFI";
-  if (id >= 932000 && id < 933000) return "RCE";
-  return "Other";
 }
 
 const panelStyle = {

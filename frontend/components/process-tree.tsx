@@ -14,13 +14,23 @@ interface ProcessNode {
   computer: string;
 }
 
+type ProcessEventData = Record<string, unknown>;
+
+interface ProcessEvent {
+  event_id: number;
+  computer: string;
+  timestamp: string;
+  event_data: ProcessEventData;
+}
+
+function stringifyValue(value: unknown, fallback = ""): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return fallback;
+}
+
 interface ProcessTreeProps {
-  events: Array<{
-    event_id: number;
-    computer: string;
-    timestamp: string;
-    event_data: any;
-  }>;
+  events: ProcessEvent[];
   onNodeClick?: (node: ProcessNode) => void;
 }
 
@@ -37,18 +47,18 @@ export function ProcessTree({ events, onNodeClick }: ProcessTreeProps) {
     
     // First pass: Create all nodes
     processEvents.forEach((event) => {
-      const data = event.event_data || {};
-      const processId = String(data.NewProcessId || data.ProcessId || "");
-      const parentProcessId = String(data.ParentProcessId || "");
+      const data = event.event_data ?? {};
+      const processId = stringifyValue(data.NewProcessId ?? data.ProcessId);
+      const parentProcessId = stringifyValue(data.ParentProcessId);
       
       if (!processId) return;
       
       const node: ProcessNode = {
         processId,
-        processName: String(data.NewProcessName || data.ProcessName || "Unknown").split("\\").pop() || "Unknown",
-        commandLine: String(data.CommandLine || ""),
+        processName: stringifyValue(data.NewProcessName ?? data.ProcessName, "Unknown").split("\\").pop() || "Unknown",
+        commandLine: stringifyValue(data.CommandLine),
         timestamp: event.timestamp,
-        user: String(data.SubjectUserName || data.User || ""),
+        user: stringifyValue(data.SubjectUserName ?? data.User),
         parentProcessId,
         children: [],
         eventId: event.event_id,
@@ -162,12 +172,7 @@ export function ProcessTree({ events, onNodeClick }: ProcessTreeProps) {
 }
 
 interface ProcessTreePanelProps {
-  events: Array<{
-    event_id: number;
-    computer: string;
-    timestamp: string;
-    event_data: any;
-  }>;
+  events: ProcessEvent[];
 }
 
 export function ProcessTreePanel({ events }: ProcessTreePanelProps) {

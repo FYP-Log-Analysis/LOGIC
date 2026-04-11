@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { IoCBadge } from "@/components/windows-ui";
 
-type PanelTab = "overview" | "raw" | "mitre";
+type PanelTab = "overview" | "iocs" | "raw" | "mitre";
 
 export interface DetectionDetailsItem {
   id: string;
@@ -25,9 +26,99 @@ interface DetectionDetailsPanelProps {
 
 const tabStyles: Record<PanelTab, { label: string }> = {
   overview: { label: "Overview" },
+  iocs: { label: "IOCs" },
   raw: { label: "Raw Event" },
   mitre: { label: "MITRE" },
 };
+
+type ExtractedIocs = {
+  ips: string[];
+  domains: string[];
+  hashes: string[];
+  files: string[];
+  users: string[];
+};
+
+const IPV4_RE = /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g;
+const DOMAIN_RE = /\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b/g;
+const HASH_RE = /\b(?:[a-fA-F0-9]{32}|[a-fA-F0-9]{40}|[a-fA-F0-9]{64})\b/g;
+const WIN_PATH_RE = /\b(?:[a-zA-Z]:\\[^\r\n\t"']+|\\\\[^\r\n\t"']+)\b/g;
+
+function collectStrings(value: unknown, out: string[], depth = 0) {
+  if (depth > 6) return;
+
+  if (typeof value === "string") {
+    out.push(value);
+    return;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    out.push(String(value));
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => collectStrings(entry, out, depth + 1));
+    return;
+  }
+
+  if (value && typeof value === "object") {
+    Object.values(value as Record<string, unknown>).forEach((entry) => collectStrings(entry, out, depth + 1));
+  }
+}
+
+function uniqueSorted(values: Iterable<string>): string[] {
+  return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
+}
+
+function extractEventIocs(item: DetectionDetailsItem | null): ExtractedIocs {
+  if (!item) {
+    return { ips: [], domains: [], hashes: [], files: [], users: [] };
+  }
+
+  const payloadStrings: string[] = [];
+  collectStrings(item.payload, payloadStrings);
+
+  const ips: string[] = [];
+  const domains: string[] = [];
+  const hashes: string[] = [];
+  const files: string[] = [];
+
+  payloadStrings.forEach((text) => {
+    const ipMatches = text.match(IPV4_RE) ?? [];
+    const domainMatches = text.match(DOMAIN_RE) ?? [];
+    const hashMatches = text.match(HASH_RE) ?? [];
+    const fileMatches = text.match(WIN_PATH_RE) ?? [];
+
+    ips.push(...ipMatches);
+    hashes.push(...hashMatches.map((v) => v.toLowerCase()));
+    files.push(...fileMatches);
+
+    domainMatches.forEach((domain) => {
+      const lower = domain.toLowerCase();
+      if (!lower.endsWith(".exe") && !lower.endsWith(".dll") && !lower.endsWith(".sys")) {
+        domains.push(lower);
+      }
+    });
+  });
+
+  const entry = ((item.payload.entry as Record<string, unknown> | undefined) ?? item.payload) as Record<string, unknown>;
+  const users = uniqueSorted([
+    String(entry.auth_user ?? ""),
+    String(entry.user ?? ""),
+    String(entry.target_user ?? ""),
+    String(entry.SubjectUserName ?? ""),
+    String(entry.TargetUserName ?? ""),
+  ].filter((value) => value && value !== "-") as string[]);
+
+  return {
+    ips: uniqueSorted(ips),
+    domains: uniqueSorted(domains),
+    hashes: uniqueSorted(hashes),
+    files: uniqueSorted(files),
+    users,
+  };
+}
 
 function metric(label: string, value: string) {
   return (
@@ -57,6 +148,13 @@ export function DetectionDetailsPanel({ item, compact = false }: DetectionDetail
   const [activeTab, setActiveTab] = useState<PanelTab>("overview");
 
   const prettyPayload = useMemo(() => toPrettyJson(item?.payload ?? {}), [item?.payload]);
+  const eventIocs = useMemo(() => extractEventIocs(item), [item]);
+  const hasIocs =
+    eventIocs.ips.length > 0 ||
+    eventIocs.domains.length > 0 ||
+    eventIocs.hashes.length > 0 ||
+    eventIocs.files.length > 0 ||
+    eventIocs.users.length > 0;
 
   return (
     <aside style={{
@@ -145,6 +243,71 @@ export function DetectionDetailsPanel({ item, compact = false }: DetectionDetail
             {metric(
               "Anomaly Score",
               item.anomalyScore != null ? `${(item.anomalyScore * 100).toFixed(1)}%` : "-",
+            )}
+          </div>
+        )}
+
+        {item && activeTab === "iocs" && (
+          <div style={{ display: "grid", gap: 10 }}>
+            {!hasIocs && (
+              <div style={{ color: "#6f6f6f", fontSize: 12, lineHeight: 1.5 }}>
+                No obvious IOCs extracted from this event payload.
+              </div>
+            )}
+
+            {eventIocs.ips.length > 0 && (
+              <div>
+                <div style={{ color: "#6f6f6f", fontSize: 10, textTransform: "uppercase", marginBottom: 7 }}>IP Addresses</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                  {eventIocs.ips.slice(0, 20).map((ip) => (
+                    <IoCBadge key={`ip-${ip}`} type="ip" value={ip} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {eventIocs.domains.length > 0 && (
+              <div>
+                <div style={{ color: "#6f6f6f", fontSize: 10, textTransform: "uppercase", marginBottom: 7 }}>Domains</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                  {eventIocs.domains.slice(0, 20).map((domain) => (
+                    <IoCBadge key={`domain-${domain}`} type="domain" value={domain} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {eventIocs.hashes.length > 0 && (
+              <div>
+                <div style={{ color: "#6f6f6f", fontSize: 10, textTransform: "uppercase", marginBottom: 7 }}>Hashes</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                  {eventIocs.hashes.slice(0, 20).map((hash) => (
+                    <IoCBadge key={`hash-${hash}`} type="hash" value={hash} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {eventIocs.files.length > 0 && (
+              <div>
+                <div style={{ color: "#6f6f6f", fontSize: 10, textTransform: "uppercase", marginBottom: 7 }}>File Paths</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                  {eventIocs.files.slice(0, 20).map((filePath) => (
+                    <IoCBadge key={`file-${filePath}`} type="file" value={filePath} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {eventIocs.users.length > 0 && (
+              <div>
+                <div style={{ color: "#6f6f6f", fontSize: 10, textTransform: "uppercase", marginBottom: 7 }}>Users</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                  {eventIocs.users.slice(0, 20).map((user) => (
+                    <IoCBadge key={`user-${user}`} type="user" value={user} />
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         )}

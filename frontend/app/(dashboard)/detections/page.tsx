@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { getRuleMatches, getDetectionAggregations, type DetectionAggregations } from "@/lib/client";
 import { useAuthStore } from "@/lib/store";
 import {
@@ -13,10 +13,11 @@ import {
   Btn,
   Spinner,
 } from "@/components/ui-primitives";
+import { EventDetailModal } from "@/components/event-detail-modal";
 import BarChart from "@/components/charts/bar-chart";
 import PieChart from "@/components/charts/pie-chart";
 import LineChart from "@/components/charts/line-chart";
-import { WindowsEventTable } from "@/components/windows-ui";
+import { IoCBadge, WindowsEventTable } from "@/components/windows-ui";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,6 +33,12 @@ interface RuleMatch {
 }
 
 type TriageStatus = "new" | "investigating" | "resolved";
+type ExtractedWebIocs = {
+  ips: string[];
+  domains: string[];
+  hashes: string[];
+  paths: string[];
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -39,6 +46,10 @@ const SEV_ORDER = ["critical", "high", "medium", "low", "unknown"];
 const SEV_COLORS: Record<string, string> = {
   critical: "#ff4444", high: "#ff8800", medium: "#f0c040", low: "#4488ff", unknown: "#555",
 };
+const IPV4_RE = /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g;
+const DOMAIN_RE = /\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b/g;
+const HASH_RE = /\b(?:[a-fA-F0-9]{32}|[a-fA-F0-9]{40}|[a-fA-F0-9]{64})\b/g;
+const PATH_RE = /(?:\/[\w%+\-.~]+)+/g;
 
 /** Derive attack category from OWASP CRS rule ID range or rule title. */
 function getCrsCategory(ruleId?: string, ruleTitle?: string): string {
@@ -73,17 +84,66 @@ function getAlertKey(m: RuleMatch): string {
   return `${m.rule_id ?? "?"}_${m.client_ip ?? "?"}_${m.timestamp ?? "?"}`;
 }
 
-const TRIAGE_CYCLE: Record<TriageStatus, TriageStatus> = {
-  new: "investigating",
-  investigating: "resolved",
-  resolved: "new",
-};
+function uniqueSorted(values: Iterable<string>): string[] {
+  return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
+}
 
-const TRIAGE_COLORS: Record<TriageStatus, string> = {
-  new: "#ff4444",
-  investigating: "#f0c040",
-  resolved: "#4caf50",
-};
+function decodeSafely(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function extractWebLogIocs(match: RuleMatch | null): ExtractedWebIocs {
+  if (!match) return { ips: [], domains: [], hashes: [], paths: [] };
+
+  const sourceStrings = [
+    match.client_ip ?? "",
+    match.path ?? "",
+    decodeSafely(match.path ?? ""),
+    match.rule_title ?? "",
+    match.rule_id ?? "",
+  ];
+
+  const ips: string[] = [];
+  const domains: string[] = [];
+  const hashes: string[] = [];
+  const paths: string[] = [];
+
+  sourceStrings.forEach((text) => {
+    if (!text) return;
+    ips.push(...(text.match(IPV4_RE) ?? []));
+    hashes.push(...(text.match(HASH_RE) ?? []).map((v) => v.toLowerCase()));
+    paths.push(...(text.match(PATH_RE) ?? []));
+
+    (text.match(DOMAIN_RE) ?? []).forEach((domain) => {
+      const lower = domain.toLowerCase();
+      if (
+        !lower.endsWith(".php") &&
+        !lower.endsWith(".js") &&
+        !lower.endsWith(".css") &&
+        !lower.endsWith(".html")
+      ) {
+        domains.push(lower);
+      }
+    });
+  });
+
+  if (match.path) {
+    paths.push(match.path);
+    const decoded = decodeSafely(match.path);
+    if (decoded !== match.path) paths.push(decoded);
+  }
+
+  return {
+    ips: uniqueSorted(ips),
+    domains: uniqueSorted(domains),
+    hashes: uniqueSorted(hashes),
+    paths: uniqueSorted(paths),
+  };
+}
 
 function loadTriageMap(): Record<string, TriageStatus> {
   try {
@@ -92,12 +152,8 @@ function loadTriageMap(): Record<string, TriageStatus> {
   } catch { return {}; }
 }
 
-function saveTriageMap(map: Record<string, TriageStatus>) {
-  try { localStorage.setItem("logic_triage", JSON.stringify(map)); } catch {}
-}
-
-function exportCsv(matches: RuleMatch[], triageMap: Record<string, TriageStatus>) {
-  const headers = ["Severity", "Rule", "IP", "Method", "Path", "Status", "Time", "Triage"];
+function exportCsv(matches: RuleMatch[]) {
+  const headers = ["Severity", "Rule", "IP", "Method", "Path", "Status", "Time"];
   const rows = matches.map((m) => [
     m.severity ?? "",
     m.rule_title ?? m.rule_id ?? "",
@@ -106,7 +162,6 @@ function exportCsv(matches: RuleMatch[], triageMap: Record<string, TriageStatus>
     m.path ?? "",
     String(m.status_code ?? ""),
     m.timestamp ?? "",
-    triageMap[getAlertKey(m)] ?? "new",
   ]);
   const csv = [headers, ...rows]
     .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
@@ -252,18 +307,16 @@ function OverviewCharts({ agg }: { agg: DetectionAggregations }) {
 
 function ThreatTable({
   matches,
-  triageMap,
-  onTriageChange,
 }: {
   matches: RuleMatch[];
-  triageMap: Record<string, TriageStatus>;
-  onTriageChange: (key: string, status: TriageStatus) => void;
 }) {
   const [search, setSearch] = useState("");
   const [sevFilter, setSevFilter] = useState("");
   const [methodFilter, setMethodFilter] = useState("");
-  const [triageFilter, setTriageFilter] = useState("");
   const [successfulOnly, setSuccessfulOnly] = useState(false);
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+  const [selectedMatch, setSelectedMatch] = useState<RuleMatch | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
 
   const severities = [...new Set(matches.map((m) => (m.severity ?? "unknown").toLowerCase()))].sort();
   const methods = [...new Set(matches.map((m) => m.method ?? "").filter(Boolean))].sort();
@@ -273,8 +326,6 @@ function ThreatTable({
     if (sevFilter && sev !== sevFilter) return false;
     if (methodFilter && (m.method ?? "") !== methodFilter) return false;
     if (successfulOnly && ![200, 201, 204].includes(Number(m.status_code ?? -1))) return false;
-    const t = triageMap[getAlertKey(m)] ?? "new";
-    if (triageFilter && t !== triageFilter) return false;
     if (search) {
       const s = search.toLowerCase();
       return (
@@ -285,6 +336,29 @@ function ThreatTable({
     }
     return true;
   });
+
+  const tableRows = useMemo(() => {
+    return filtered.slice(0, 200).map((match, index) => ({
+      id: `${getAlertKey(match)}:${index}`,
+      match,
+    })) as Array<Record<string, unknown>>;
+  }, [filtered]);
+
+  const extractedIocs = useMemo(() => extractWebLogIocs(selectedMatch), [selectedMatch]);
+  const hasIocs =
+    extractedIocs.ips.length > 0 ||
+    extractedIocs.domains.length > 0 ||
+    extractedIocs.hashes.length > 0 ||
+    extractedIocs.paths.length > 0;
+
+  useEffect(() => {
+    if (!selectedRowId) return;
+    const stillVisible = tableRows.some((row) => String(row.id ?? "") === selectedRowId);
+    if (!stillVisible) {
+      setSelectedRowId(null);
+      setSelectedMatch(null);
+    }
+  }, [selectedRowId, tableRows]);
 
   return (
     <div>
@@ -303,16 +377,6 @@ function ThreatTable({
             options={[{ value: "", label: "All Methods" }, ...methods.map((m) => ({ value: m, label: m }))]}
           />
         )}
-        <SelectInput
-          value={triageFilter}
-          onChange={setTriageFilter}
-          options={[
-            { value: "", label: "All Triage" },
-            { value: "new", label: "NEW" },
-            { value: "investigating", label: "INVESTIGATING" },
-            { value: "resolved", label: "RESOLVED" },
-          ]}
-        />
         <button
           onClick={() => setSuccessfulOnly((v) => !v)}
           style={{
@@ -334,7 +398,7 @@ function ThreatTable({
         </div>
         <Btn
           variant="ghost"
-          onClick={() => exportCsv(filtered.slice(0, 200), triageMap)}
+          onClick={() => exportCsv(filtered.slice(0, 200))}
           style={{ marginLeft: "auto", fontSize: 10 }}
         >
           EXPORT CSV
@@ -347,50 +411,15 @@ function ThreatTable({
         stickyHeader
         emptyMessage="No detections found for the current filters"
         rowKey={(row) => String(row.id ?? "")}
-        data={filtered.slice(0, 200).map((match, index) => {
-          const key = getAlertKey(match);
-          const triage = triageMap[key] ?? "new";
-          return {
-            id: `${key}:${index}`,
-            key,
-            match,
-            triage,
-          };
-        }) as Array<Record<string, unknown>>}
+        data={tableRows}
+        selectedRowKey={selectedRowId ?? undefined}
+        onRowClick={(row) => {
+          const rowId = String(row.id ?? "");
+          const match = (row.match ?? null) as RuleMatch | null;
+          setSelectedRowId(rowId);
+          setSelectedMatch(match);
+        }}
         columns={[
-          {
-            key: "triage",
-            label: "Triage",
-            width: "104px",
-            render: (row) => {
-              const triage = String(row.triage || "new") as TriageStatus;
-              const alertKey = String(row.key || "");
-              return (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onTriageChange(alertKey, TRIAGE_CYCLE[triage]);
-                  }}
-                  title="Click to cycle: New → Investigating → Resolved"
-                  style={{
-                    background: "transparent",
-                    border: `1px solid ${TRIAGE_COLORS[triage]}44`,
-                    color: TRIAGE_COLORS[triage],
-                    borderRadius: 2,
-                    padding: "2px 6px",
-                    fontSize: 9,
-                    letterSpacing: 0.6,
-                    textTransform: "uppercase",
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                    fontFamily: "inherit",
-                  }}
-                >
-                  {triage}
-                </button>
-              );
-            },
-          },
           {
             key: "severity",
             label: "Severity",
@@ -476,10 +505,108 @@ function ThreatTable({
           },
         ]}
       />
+      {selectedMatch && (
+        <div
+          style={{
+            marginTop: 12,
+            border: "1px solid #1e1e1e",
+            background: "#0d0d0d",
+            borderRadius: 4,
+            padding: 12,
+            display: "grid",
+            gap: 10,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ color: "#8c8c8c", fontSize: 10, letterSpacing: 0.8, textTransform: "uppercase" }}>
+                Selected Log
+              </div>
+              <div style={{ color: "#d7e2e9", fontSize: 12, marginTop: 4 }}>
+                {selectedMatch.rule_title ?? selectedMatch.rule_id ?? "Detection event"}
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Btn variant="ghost" style={{ fontSize: 10 }} onClick={() => setShowDetailsModal(true)}>
+                View More
+              </Btn>
+              <Btn
+                variant="ghost"
+                style={{ fontSize: 10 }}
+                onClick={() => {
+                  setSelectedRowId(null);
+                  setSelectedMatch(null);
+                }}
+              >
+                Clear Selection
+              </Btn>
+            </div>
+          </div>
+
+          {!hasIocs && (
+            <div style={{ color: "#666", fontSize: 12 }}>
+              No obvious IOCs extracted from the selected web log.
+            </div>
+          )}
+
+          {extractedIocs.ips.length > 0 && (
+            <div>
+              <div style={{ color: "#6f6f6f", fontSize: 10, textTransform: "uppercase", marginBottom: 7 }}>IP Addresses</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                {extractedIocs.ips.slice(0, 20).map((ip) => (
+                  <IoCBadge key={`ip-${ip}`} type="ip" value={ip} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {extractedIocs.domains.length > 0 && (
+            <div>
+              <div style={{ color: "#6f6f6f", fontSize: 10, textTransform: "uppercase", marginBottom: 7 }}>Domains</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                {extractedIocs.domains.slice(0, 20).map((domain) => (
+                  <IoCBadge key={`domain-${domain}`} type="domain" value={domain} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {extractedIocs.hashes.length > 0 && (
+            <div>
+              <div style={{ color: "#6f6f6f", fontSize: 10, textTransform: "uppercase", marginBottom: 7 }}>Hashes</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                {extractedIocs.hashes.slice(0, 20).map((hash) => (
+                  <IoCBadge key={`hash-${hash}`} type="hash" value={hash} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {extractedIocs.paths.length > 0 && (
+            <div>
+              <div style={{ color: "#6f6f6f", fontSize: 10, textTransform: "uppercase", marginBottom: 7 }}>Paths / URLs</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                {extractedIocs.paths.slice(0, 20).map((pathValue) => (
+                  <IoCBadge key={`path-${pathValue}`} type="file" value={pathValue} />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       {filtered.length > 200 && (
         <div style={{ color: "#444", fontSize: 11, marginTop: 6, textAlign: "center" }}>
           Showing 200 of {filtered.length.toLocaleString()} — refine filters to narrow results
         </div>
+      )}
+
+      {showDetailsModal && selectedMatch && (
+        <EventDetailModal
+          title={selectedMatch.rule_title ?? selectedMatch.rule_id ?? "Detection event"}
+          subtitle={`${(selectedMatch.severity ?? "unknown").toUpperCase()} | ${selectedMatch.method ?? "-"} ${selectedMatch.path ?? "-"}`}
+          payload={selectedMatch}
+          onClose={() => setShowDetailsModal(false)}
+        />
       )}
     </div>
   );
@@ -525,14 +652,6 @@ export default function DetectionsPage() {
   }, [activeProject?.id, timeRange?.from, timeRange?.to]);
 
   useEffect(() => { loadData(); }, [loadData]);
-
-  const handleTriageChange = useCallback((key: string, status: TriageStatus) => {
-    setTriageMap((prev) => {
-      const next = { ...prev, [key]: status };
-      saveTriageMap(next);
-      return next;
-    });
-  }, []);
 
   if (!activeProject?.id) return (
     <div style={{ textAlign: "center", padding: 60, color: "#555" }}>
@@ -631,7 +750,7 @@ export default function DetectionsPage() {
               Open Threat Timeline Page
             </Link>
           </div>
-          <ThreatTable matches={matches} triageMap={triageMap} onTriageChange={handleTriageChange} />
+          <ThreatTable matches={matches} />
         </>
       )}
     </div>

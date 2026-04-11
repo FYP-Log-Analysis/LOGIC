@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { getRuleMatches, getBehavioralResults } from "@/lib/client";
 import { useAuthStore } from "@/lib/store";
 import {
@@ -10,6 +11,8 @@ import {
   Spinner,
   StatusBadge,
 } from "@/components/ui-primitives";
+import { WindowsEventTable } from "@/components/windows-ui";
+import { EventDetailModal } from "@/components/event-detail-modal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,7 +30,7 @@ interface RuleMatch {
 interface BehResult {
   request_rate_spikes?: Array<{ ip?: string; client_ip?: string; count?: number; rate?: number; is_anomaly?: boolean; }>;
   url_enumeration?: Array<{ ip?: string; client_ip?: string; unique_paths?: number; is_anomaly?: boolean; }>;
-  status_code_spikes?: Array<{ window?: string; status?: number | string; count?: number; is_anomaly?: boolean; }>;
+  status_code_spikes?: Array<{ ip?: string; client_ip?: string; window?: string; status?: number | string; count?: number; is_anomaly?: boolean; }>;
   visitor_rates?: Array<{ ip?: string; window?: string; requests?: number; is_anomaly?: boolean; }>;
 }
 
@@ -41,6 +44,7 @@ interface IpRow {
   visitorAnomaly: boolean;
   riskScore: number;
   isCorrelated: boolean;
+  lastSeen: string | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -80,6 +84,13 @@ const panelTitleStyle = {
   marginBottom: 12,
 };
 
+function getRiskColor(score: number): string {
+  if (score >= 20) return "#ff4c4c";
+  if (score >= 12) return "#ff9800";
+  if (score >= 6) return "#f0c040";
+  return "#8bc34a";
+}
+
 // ─── Matrix Cell ──────────────────────────────────────────────────────────────
 
 function MatrixCell({ hit, color }: { hit: boolean; color?: string }) {
@@ -107,6 +118,12 @@ export default function CorrelationPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [ipRows, setIpRows] = useState<IpRow[]>([]);
+  const [ruleMatchesByIp, setRuleMatchesByIp] = useState<Record<string, RuleMatch[]>>({});
+  const [selectedIp, setSelectedIp] = useState<string | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [search, setSearch] = useState("");
+  const [severityFilter, setSeverityFilter] = useState("");
+  const [correlatedOnly, setCorrelatedOnly] = useState(true);
   const [heatRules, setHeatRules] = useState<string[]>([]);
   const [heatIps, setHeatIps] = useState<string[]>([]);
   const [heatGrid, setHeatGrid] = useState<Record<string, Record<string, number>>>({});
@@ -147,8 +164,13 @@ export default function CorrelationPage() {
       setError("Behavioral results not available yet. Correlation currently uses rule matches only.");
     }
 
-    // Collect all known IPs from matches
-    const allIps = [...new Set(matches.map((m) => m.client_ip).filter(Boolean))] as string[];
+    const byIp: Record<string, RuleMatch[]> = {};
+    for (const match of matches) {
+      if (!match.client_ip) continue;
+      if (!byIp[match.client_ip]) byIp[match.client_ip] = [];
+      byIp[match.client_ip].push(match);
+    }
+    setRuleMatchesByIp(byIp);
 
     // Behavioral IP sets
     const rateIps = new Set(
@@ -158,15 +180,24 @@ export default function CorrelationPage() {
       (behData.url_enumeration ?? []).filter((r) => r.is_anomaly).map((r) => r.ip ?? r.client_ip).filter(Boolean) as string[]
     );
     const statusIps = new Set(
-      (behData.status_code_spikes ?? []).filter((r) => r.is_anomaly).map(() => "").filter(Boolean) as string[]
+      (behData.status_code_spikes ?? []).filter((r) => r.is_anomaly).map((r) => r.ip ?? r.client_ip).filter(Boolean) as string[]
     );
     const visitorIps = new Set(
       (behData.visitor_rates ?? []).filter((r) => r.is_anomaly).map((r) => r.ip).filter(Boolean) as string[]
     );
 
+    // Union of all IPs observed in any module
+    const allIps = [...new Set([
+      ...Object.keys(byIp),
+      ...Array.from(rateIps),
+      ...Array.from(urlIps),
+      ...Array.from(statusIps),
+      ...Array.from(visitorIps),
+    ])] as string[];
+
     // Build per-IP rows
     const rows: IpRow[] = allIps.map((ip) => {
-      const ipMatches = matches.filter((m) => m.client_ip === ip);
+      const ipMatches = byIp[ip] ?? [];
       const highestSev = ipMatches.reduce<string>((best, m) => {
         const sev = (m.severity ?? "").toUpperCase();
         return (SEV_ORDER[sev] ?? 0) > (SEV_ORDER[best] ?? 0) ? sev : best;
@@ -175,16 +206,28 @@ export default function CorrelationPage() {
       const urlEnum = urlIps.has(ip);
       const statusSpike = statusIps.has(ip);
       const visitorAnomaly = visitorIps.has(ip);
+      const behaviorSignalCount = [rateSpike, urlEnum, statusSpike, visitorAnomaly].filter(Boolean).length;
       const riskScore =
+        Math.min(ipMatches.length, 5) +
         (rateSpike ? 3 : 0) +
         (urlEnum ? 2 : 0) +
+        (statusSpike ? 1 : 0) +
         (visitorAnomaly ? 1 : 0) +
         ((highestSev === "CRITICAL") ? 20 : (highestSev === "HIGH") ? 10 : 0);
-      const isCorrelated = ipMatches.length > 0 && (rateSpike || urlEnum || visitorAnomaly);
-      return { ip, ruleMatchCount: ipMatches.length, highestSev, rateSpike, urlEnum, statusSpike, visitorAnomaly, riskScore, isCorrelated };
+      const isCorrelated = ipMatches.length >= 2 || (ipMatches.length > 0 && behaviorSignalCount > 0) || behaviorSignalCount >= 2;
+      const lastSeen = ipMatches.length > 0
+        ? ipMatches
+            .map((m) => m.timestamp)
+            .filter(Boolean)
+            .sort((a, b) => new Date(b ?? 0).getTime() - new Date(a ?? 0).getTime())[0] ?? null
+        : null;
+      return { ip, ruleMatchCount: ipMatches.length, highestSev, rateSpike, urlEnum, statusSpike, visitorAnomaly, riskScore, isCorrelated, lastSeen };
     });
 
-    rows.sort((a, b) => b.riskScore - a.riskScore);
+    rows.sort((a, b) => {
+      if (a.isCorrelated !== b.isCorrelated) return a.isCorrelated ? -1 : 1;
+      return b.riskScore - a.riskScore;
+    });
     setIpRows(rows);
 
     // Build Rule x IP heatmap (top 10 rules x top 15 IPs)
@@ -215,6 +258,41 @@ export default function CorrelationPage() {
   }, [activeProject?.id, timeRange?.from, timeRange?.to]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  useEffect(() => {
+    if (!selectedIp) return;
+    const stillVisible = ipRows.some((row) => row.ip === selectedIp);
+    if (!stillVisible) {
+      setSelectedIp(null);
+      setShowDetailsModal(false);
+    }
+  }, [selectedIp, ipRows]);
+
+  const selectedRow = useMemo(() => ipRows.find((row) => row.ip === selectedIp) ?? null, [ipRows, selectedIp]);
+  const selectedMatches = useMemo(() => (selectedRow ? (ruleMatchesByIp[selectedRow.ip] ?? []) : []), [selectedRow, ruleMatchesByIp]);
+
+  const severityOptions = useMemo(
+    () => [...new Set(ipRows.map((row) => row.highestSev).filter(Boolean))].sort((a, b) => (SEV_ORDER[b] ?? 0) - (SEV_ORDER[a] ?? 0)),
+    [ipRows]
+  );
+
+  const filteredRows = useMemo(() => {
+    return ipRows.filter((row) => {
+      if (correlatedOnly && !row.isCorrelated) return false;
+      if (severityFilter && row.highestSev !== severityFilter) return false;
+      if (!search) return true;
+      const q = search.toLowerCase();
+      const topRules = (ruleMatchesByIp[row.ip] ?? [])
+        .slice(0, 6)
+        .map((m) => (m.rule_title ?? m.rule_id ?? "").toLowerCase());
+      return row.ip.toLowerCase().includes(q) || topRules.some((r) => r.includes(q));
+    });
+  }, [correlatedOnly, ipRows, ruleMatchesByIp, search, severityFilter]);
+
+  const tableRows = useMemo(
+    () => filteredRows.slice(0, 300).map((row) => ({ id: row.ip, row })) as Array<Record<string, unknown>>,
+    [filteredRows]
+  );
 
   if (!activeProject?.id) return (
     <div style={{ textAlign: "center", padding: 60, color: "#555" }}>
@@ -265,55 +343,277 @@ export default function CorrelationPage() {
 
       {/* High Confidence Threat Actors */}
       <div style={{ ...panelStyle, marginBottom: 24 }}>
-        <div style={panelTitleStyle}>
-          High Confidence Threat Actors
-          <span style={{ marginLeft: 10, color: "#7cb342", fontSize: 11 }}>({correlatedRows.length} correlated IPs)</span>
+        <div style={{ ...panelTitleStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+          <span>
+            Correlated Threat Actors
+            <span style={{ marginLeft: 10, color: "#7cb342", fontSize: 11 }}>({correlatedRows.length} correlated IPs)</span>
+          </span>
+          <Link
+            href="/detections"
+            style={{
+              color: "#7cb342",
+              border: "1px solid #2f4a20",
+              background: "#111",
+              borderRadius: 3,
+              padding: "6px 10px",
+              fontSize: 10,
+              letterSpacing: 0.7,
+              textTransform: "uppercase",
+              textDecoration: "none",
+            }}
+          >
+            Open Detections
+          </Link>
         </div>
-        {correlatedRows.length === 0 ? (
-          <div style={{ color: "#6b7280", fontSize: 13 }}>No IPs found in both rule matches and behavioral analysis.</div>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid #2a2a2a", color: "#666" }}>
-                  <th style={{ textAlign: "left", padding: "6px 10px" }}>IP Address</th>
-                  <th style={{ textAlign: "center", padding: "6px 10px" }}>Rule Matches</th>
-                  <th style={{ textAlign: "center", padding: "6px 10px" }}>Severity</th>
-                  <th style={{ textAlign: "center", padding: "6px 10px" }}>Rate Spike</th>
-                  <th style={{ textAlign: "center", padding: "6px 10px" }}>URL Enum</th>
-                  <th style={{ textAlign: "center", padding: "6px 10px" }}>Visitor Anomaly</th>
-                  <th style={{ textAlign: "right", padding: "6px 10px" }}>Risk Score</th>
-                </tr>
-              </thead>
-              <tbody>
-                {correlatedRows.map((row) => (
-                  <tr key={row.ip} style={{ borderBottom: "1px solid #1a1a1a" }}>
-                    <td style={{ padding: "7px 10px", color: "#c0c0c0", fontFamily: "var(--font-mono-stack)", fontWeight: 700 }}>
-                      {row.ip}
-                      {row.highestSev === "CRITICAL" && (
-                        <span style={{ marginLeft: 6, background: "#ff4c4c22", color: "#ff4c4c", borderRadius: 4, padding: "1px 6px", fontSize: 10, fontWeight: 700 }}>CRITICAL</span>
-                      )}
-                    </td>
-                    <td style={{ padding: "7px 10px", textAlign: "center", color: "#d0d0d0" }}>{row.ruleMatchCount}</td>
-                    <td style={{ padding: "7px 10px", textAlign: "center" }}>
-                      <StatusBadge status={row.highestSev} />
-                    </td>
-                    <td style={{ padding: "7px 10px", textAlign: "center" }}>
-                      <span style={{ color: row.rateSpike ? "#ff9800" : "#333" }}>{row.rateSpike ? "●" : "○"}</span>
-                    </td>
-                    <td style={{ padding: "7px 10px", textAlign: "center" }}>
-                      <span style={{ color: row.urlEnum ? "#2196f3" : "#333" }}>{row.urlEnum ? "●" : "○"}</span>
-                    </td>
-                    <td style={{ padding: "7px 10px", textAlign: "center" }}>
-                      <span style={{ color: row.visitorAnomaly ? "#e91e63" : "#333" }}>{row.visitorAnomaly ? "●" : "○"}</span>
-                    </td>
-                    <td style={{ padding: "7px 10px", textAlign: "right", fontWeight: 700, color: row.riskScore >= 20 ? "#ff4c4c" : row.riskScore >= 10 ? "#ff9800" : "#8bc34a" }}>
-                      {row.riskScore}
-                    </td>
+
+        <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search IP or rule..."
+            style={{
+              background: "#111",
+              border: "1px solid #2a2a2a",
+              color: "#aaa",
+              borderRadius: 2,
+              padding: "7px 10px",
+              fontSize: 11,
+              minWidth: 260,
+            }}
+          />
+          <select
+            value={severityFilter}
+            onChange={(e) => setSeverityFilter(e.target.value)}
+            style={{
+              background: "#111",
+              border: "1px solid #2a2a2a",
+              color: "#aaa",
+              borderRadius: 2,
+              padding: "7px 10px",
+              fontSize: 11,
+            }}
+          >
+            <option value="">All Severities</option>
+            {severityOptions.map((sev) => (
+              <option key={sev} value={sev}>{sev}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => setCorrelatedOnly((v) => !v)}
+            style={{
+              background: correlatedOnly ? "#1a2a1a" : "#111",
+              border: `1px solid ${correlatedOnly ? "#4caf50" : "#2a2a2a"}`,
+              color: correlatedOnly ? "#4caf50" : "#666",
+              borderRadius: 3,
+              padding: "7px 10px",
+              fontSize: 10,
+              letterSpacing: 0.8,
+              textTransform: "uppercase",
+              cursor: "pointer",
+            }}
+          >
+            {correlatedOnly ? "Correlated Only" : "All Actors"}
+          </button>
+          <div style={{ color: "#666", fontSize: 11, marginLeft: "auto" }}>
+            {filteredRows.length.toLocaleString()} / {ipRows.length.toLocaleString()}
+          </div>
+        </div>
+
+        <WindowsEventTable
+          density="compact"
+          stickyHeader
+          maxHeight={560}
+          emptyMessage="No correlation results for current filters"
+          rowKey={(row) => String(row.id ?? "")}
+          data={tableRows}
+          selectedRowKey={selectedIp ?? undefined}
+          onRowClick={(tableRow) => {
+            const ipRow = (tableRow.row ?? null) as IpRow | null;
+            if (!ipRow) return;
+            setSelectedIp(ipRow.ip);
+          }}
+          columns={[
+            {
+              key: "state",
+              label: "State",
+              width: "130px",
+              render: (tableRow) => {
+                const row = tableRow.row as IpRow;
+                return (
+                  <span style={{
+                    color: row.isCorrelated ? "#7cb342" : "#666",
+                    border: `1px solid ${row.isCorrelated ? "#2f4a20" : "#2a2a2a"}`,
+                    borderRadius: 3,
+                    padding: "2px 7px",
+                    fontSize: 9,
+                    letterSpacing: 0.6,
+                    textTransform: "uppercase",
+                  }}>
+                    {row.isCorrelated ? "Correlated" : "Observed"}
+                  </span>
+                );
+              },
+            },
+            {
+              key: "ip",
+              label: "IP",
+              width: "150px",
+              render: (tableRow) => {
+                const row = tableRow.row as IpRow;
+                return <span style={{ color: "#c0c0c0", fontFamily: "var(--font-mono-stack)", fontSize: 11 }}>{row.ip}</span>;
+              },
+            },
+            {
+              key: "matches",
+              label: "Rule Matches",
+              width: "110px",
+              render: (tableRow) => {
+                const row = tableRow.row as IpRow;
+                return <span style={{ color: "#d7d7d7", fontFamily: "var(--font-mono-stack)" }}>{row.ruleMatchCount}</span>;
+              },
+            },
+            {
+              key: "severity",
+              label: "Highest Severity",
+              width: "140px",
+              render: (tableRow) => {
+                const row = tableRow.row as IpRow;
+                return <StatusBadge status={row.highestSev} />;
+              },
+            },
+            {
+              key: "signals",
+              label: "Behavioral Signals",
+              width: "180px",
+              render: (tableRow) => {
+                const row = tableRow.row as IpRow;
+                return (
+                  <span style={{ display: "inline-flex", gap: 5, fontSize: 10, letterSpacing: 0.4, fontFamily: "var(--font-mono-stack)" }}>
+                    <span style={{ color: row.rateSpike ? "#ff9800" : "#444" }}>R</span>
+                    <span style={{ color: row.urlEnum ? "#2196f3" : "#444" }}>U</span>
+                    <span style={{ color: row.statusSpike ? "#9c27b0" : "#444" }}>S</span>
+                    <span style={{ color: row.visitorAnomaly ? "#e91e63" : "#444" }}>V</span>
+                  </span>
+                );
+              },
+            },
+            {
+              key: "risk",
+              label: "Risk",
+              width: "90px",
+              render: (tableRow) => {
+                const row = tableRow.row as IpRow;
+                return <span style={{ color: getRiskColor(row.riskScore), fontWeight: 700 }}>{row.riskScore}</span>;
+              },
+            },
+            {
+              key: "last_seen",
+              label: "Last Seen",
+              width: "190px",
+              render: (tableRow) => {
+                const row = tableRow.row as IpRow;
+                return <span style={{ color: "#666", whiteSpace: "nowrap", fontSize: 11 }}>{row.lastSeen ? new Date(row.lastSeen).toLocaleString() : "-"}</span>;
+              },
+            },
+          ]}
+        />
+
+        {selectedRow && (
+          <div
+            style={{
+              marginTop: 12,
+              border: "1px solid #1e1e1e",
+              background: "#0d0d0d",
+              borderRadius: 4,
+              padding: 12,
+              display: "grid",
+              gap: 10,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ color: "#8c8c8c", fontSize: 10, letterSpacing: 0.8, textTransform: "uppercase" }}>
+                  Selected Correlation Actor
+                </div>
+                <div style={{ color: "#d7e2e9", fontSize: 12, marginTop: 4, fontFamily: "var(--font-mono-stack)" }}>
+                  {selectedRow.ip}
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Btn variant="ghost" style={{ fontSize: 10 }} onClick={() => setShowDetailsModal(true)}>
+                  View Full Analysis
+                </Btn>
+                <Btn
+                  variant="ghost"
+                  style={{ fontSize: 10 }}
+                  onClick={() => {
+                    setSelectedIp(null);
+                    setShowDetailsModal(false);
+                  }}
+                >
+                  Clear Selection
+                </Btn>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
+              <div style={{ border: "1px solid #1e1e1e", borderRadius: 4, padding: 8 }}>
+                <div style={{ fontSize: 10, color: "#777", textTransform: "uppercase", marginBottom: 4 }}>Severity</div>
+                <StatusBadge status={selectedRow.highestSev} />
+              </div>
+              <div style={{ border: "1px solid #1e1e1e", borderRadius: 4, padding: 8 }}>
+                <div style={{ fontSize: 10, color: "#777", textTransform: "uppercase", marginBottom: 4 }}>Rule Matches</div>
+                <div style={{ color: "#d7d7d7", fontSize: 15, fontWeight: 600 }}>{selectedRow.ruleMatchCount}</div>
+              </div>
+              <div style={{ border: "1px solid #1e1e1e", borderRadius: 4, padding: 8 }}>
+                <div style={{ fontSize: 10, color: "#777", textTransform: "uppercase", marginBottom: 4 }}>Correlation State</div>
+                <div style={{ color: selectedRow.isCorrelated ? "#7cb342" : "#888", fontSize: 12, fontWeight: 600 }}>
+                  {selectedRow.isCorrelated ? "Correlated" : "Observed"}
+                </div>
+              </div>
+              <div style={{ border: "1px solid #1e1e1e", borderRadius: 4, padding: 8 }}>
+                <div style={{ fontSize: 10, color: "#777", textTransform: "uppercase", marginBottom: 4 }}>Risk Score</div>
+                <div style={{ color: getRiskColor(selectedRow.riskScore), fontSize: 15, fontWeight: 700 }}>{selectedRow.riskScore}</div>
+              </div>
+            </div>
+
+            <div style={{ color: "#888", fontSize: 11 }}>
+              Signals: <span style={{ color: selectedRow.rateSpike ? "#ff9800" : "#555" }}>Request Rate</span> | <span style={{ color: selectedRow.urlEnum ? "#2196f3" : "#555" }}>URL Enumeration</span> | <span style={{ color: selectedRow.statusSpike ? "#9c27b0" : "#555" }}>Status Spike</span> | <span style={{ color: selectedRow.visitorAnomaly ? "#e91e63" : "#555" }}>Visitor Anomaly</span>
+            </div>
+
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #1f1f1f", color: "#666" }}>
+                    <th style={{ textAlign: "left", padding: "6px 8px" }}>Rule</th>
+                    <th style={{ textAlign: "left", padding: "6px 8px" }}>Path</th>
+                    <th style={{ textAlign: "center", padding: "6px 8px" }}>Method</th>
+                    <th style={{ textAlign: "center", padding: "6px 8px" }}>Status</th>
+                    <th style={{ textAlign: "right", padding: "6px 8px" }}>Time</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {selectedMatches.slice(0, 8).map((match, idx) => (
+                    <tr key={`${selectedRow.ip}-${idx}`} style={{ borderBottom: "1px solid #151515" }}>
+                      <td style={{ padding: "6px 8px", color: "#c0c0c0" }} title={match.rule_title ?? match.rule_id ?? "-"}>
+                        {match.rule_title ?? match.rule_id ?? "-"}
+                      </td>
+                      <td style={{ padding: "6px 8px", color: "#666" }} title={match.path ?? "-"}>{match.path ?? "-"}</td>
+                      <td style={{ padding: "6px 8px", color: "#888", textAlign: "center", fontFamily: "var(--font-mono-stack)" }}>{match.method ?? "-"}</td>
+                      <td style={{ padding: "6px 8px", color: "#999", textAlign: "center", fontFamily: "var(--font-mono-stack)" }}>{match.status_code ?? "-"}</td>
+                      <td style={{ padding: "6px 8px", color: "#555", textAlign: "right", whiteSpace: "nowrap" }}>{match.timestamp ? new Date(match.timestamp).toLocaleString() : "-"}</td>
+                    </tr>
+                  ))}
+                  {selectedMatches.length === 0 && (
+                    <tr>
+                      <td colSpan={5} style={{ padding: "10px 8px", color: "#666", textAlign: "center" }}>
+                        No direct rule matches for this actor. Correlation is driven by behavioral signals.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
@@ -426,50 +726,26 @@ export default function CorrelationPage() {
         </div>
       )}
 
-      {/* All IPs Table */}
-      <div style={panelStyle}>
-        <div style={panelTitleStyle}>
-          All Threat Actors by Risk Score ({ipRows.length} IPs)
-        </div>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid #2a2a2a", color: "#666" }}>
-                <th style={{ textAlign: "left", padding: "6px 10px" }}>IP</th>
-                <th style={{ textAlign: "center", padding: "6px 10px" }}>Matches</th>
-                <th style={{ textAlign: "center", padding: "6px 10px" }}>Severity</th>
-                <th style={{ textAlign: "center", padding: "6px 10px" }}>Modules</th>
-                <th style={{ textAlign: "right", padding: "6px 10px" }}>Risk</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ipRows.map((row) => {
-                const modules = [row.rateSpike && "R", row.urlEnum && "U", row.visitorAnomaly && "V"].filter(Boolean);
-                return (
-                  <tr key={row.ip} style={{ borderBottom: "1px solid #161616" }}>
-                    <td style={{ padding: "6px 10px", color: "#c0c0c0", fontFamily: "var(--font-mono-stack)" }}>
-                      {row.ip}
-                      {row.isCorrelated && <span style={{ marginLeft: 6, color: "#7cb342", fontSize: 10, fontWeight: 700 }}>CORRELATED</span>}
-                    </td>
-                    <td style={{ padding: "6px 10px", textAlign: "center", color: "#d0d0d0" }}>{row.ruleMatchCount}</td>
-                    <td style={{ padding: "6px 10px", textAlign: "center" }}>
-                      <span style={{ color: severityColor(row.highestSev), fontWeight: 700, fontSize: 11 }}>{row.highestSev}</span>
-                    </td>
-                    <td style={{ padding: "6px 10px", textAlign: "center" }}>
-                      <span style={{ fontFamily: "var(--font-mono-stack)", color: "#666", fontSize: 11 }}>
-                        {modules.length > 0 ? modules.join("+") : "—"}
-                      </span>
-                    </td>
-                    <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: 700, color: row.riskScore >= 20 ? "#ff4c4c" : row.riskScore >= 10 ? "#ff9800" : "#8bc34a" }}>
-                      {row.riskScore}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {showDetailsModal && selectedRow && (
+        <EventDetailModal
+          title={`Correlation Detail: ${selectedRow.ip}`}
+          subtitle={`${selectedRow.highestSev} severity | Risk ${selectedRow.riskScore} | ${selectedMatches.length} related rule events`}
+          payload={{
+            actor: selectedRow,
+            related_events: selectedMatches,
+            analysis: {
+              correlation_definition: "Shared source IP with repeated or multi-module suspicious behavior within active project scope",
+              behavioral_signals: {
+                request_rate_spike: selectedRow.rateSpike,
+                url_enumeration: selectedRow.urlEnum,
+                status_spike: selectedRow.statusSpike,
+                visitor_anomaly: selectedRow.visitorAnomaly,
+              },
+            },
+          }}
+          onClose={() => setShowDetailsModal(false)}
+        />
+      )}
     </div>
   );
 }

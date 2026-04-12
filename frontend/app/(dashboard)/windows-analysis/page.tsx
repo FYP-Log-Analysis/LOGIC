@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   getWindowsSigmaResults,
   getWindowsIOCs,
@@ -101,6 +102,7 @@ function readField(row: InvestigationRow, field: string): string {
 }
 
 export default function WindowsAnalysisPage() {
+  const searchParams = useSearchParams();
   const { activeProject, displayMode, setDisplayMode } = useAuthStore();
   const isCompact = displayMode === "compact";
 
@@ -122,6 +124,8 @@ export default function WindowsAnalysisPage() {
   const [channelFilter, setChannelFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [showOnlyAnomalous, setShowOnlyAnomalous] = useState(false);
+  const [windowStartFilter, setWindowStartFilter] = useState<string | null>(null);
+  const [windowEndFilter, setWindowEndFilter] = useState<string | null>(null);
 
   const [sortKey, setSortKey] = useState<string>("timestamp");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -132,6 +136,12 @@ export default function WindowsAnalysisPage() {
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [showDetailsPanel, setShowDetailsPanel] = useState(true);
+
+  const deepLinkSource = searchParams.get("source");
+  const deepLinkWindowStart = searchParams.get("window_start");
+  const deepLinkWindowEnd = searchParams.get("window_end");
+  const deepLinkAnomalousOnly = searchParams.get("anomalous_only") === "true";
+  const isDeepLinked = Boolean(deepLinkSource || deepLinkWindowStart || deepLinkWindowEnd || deepLinkAnomalousOnly);
 
   const fetchResults = useCallback(async () => {
     if (!activeProject?.id) return;
@@ -161,8 +171,24 @@ export default function WindowsAnalysisPage() {
   }, [activeProject?.id, fetchResults]);
 
   useEffect(() => {
+    if (!isDeepLinked) return;
+
+    if (deepLinkSource === "behavioral" || deepLinkSource === "sigma") {
+      setSourceFilter(deepLinkSource);
+    }
+    if (deepLinkAnomalousOnly) {
+      setShowOnlyAnomalous(true);
+      if (deepLinkSource !== "sigma") {
+        setSourceFilter("behavioral");
+      }
+    }
+    setWindowStartFilter(deepLinkWindowStart || null);
+    setWindowEndFilter(deepLinkWindowEnd || null);
+  }, [deepLinkAnomalousOnly, deepLinkSource, deepLinkWindowEnd, deepLinkWindowStart, isDeepLinked]);
+
+  useEffect(() => {
     setCurrentPage(1);
-  }, [severityFilter, sourceFilter, computerFilter, eventIdFilter, channelFilter, searchQuery, showOnlyAnomalous, pageSize, sortKey, sortDirection]);
+  }, [severityFilter, sourceFilter, computerFilter, eventIdFilter, channelFilter, searchQuery, showOnlyAnomalous, windowStartFilter, windowEndFilter, pageSize, sortKey, sortDirection]);
 
   useEffect(() => {
     if (!activeProject?.id) return;
@@ -348,8 +374,19 @@ export default function WindowsAnalysisPage() {
       });
     }
 
+    if (windowStartFilter || windowEndFilter) {
+      const startTs = windowStartFilter ? new Date(windowStartFilter).getTime() : Number.NEGATIVE_INFINITY;
+      const endTs = windowEndFilter ? new Date(windowEndFilter).getTime() : Number.POSITIVE_INFINITY;
+      rows = rows.filter((row) => {
+        if (!row.timestamp) return false;
+        const rowTs = new Date(row.timestamp).getTime();
+        if (Number.isNaN(rowTs)) return false;
+        return rowTs >= startTs && rowTs < endTs;
+      });
+    }
+
     return rows;
-  }, [unifiedRows, sourceFilter, showOnlyAnomalous, severityFilter, computerFilter, eventIdFilter, channelFilter, searchQuery]);
+  }, [unifiedRows, sourceFilter, showOnlyAnomalous, severityFilter, computerFilter, eventIdFilter, channelFilter, searchQuery, windowStartFilter, windowEndFilter]);
 
   const sortedRows = useMemo(() => {
     const clone = [...filteredRows];
@@ -387,6 +424,14 @@ export default function WindowsAnalysisPage() {
     if (!selectedRowId) return null;
     return sortedRows.find((row) => row.id === selectedRowId) || null;
   }, [sortedRows, selectedRowId]);
+
+  useEffect(() => {
+    if (!isDeepLinked || sortedRows.length === 0) return;
+    setSelectedRowId((prev) => {
+      if (prev && sortedRows.some((row) => row.id === prev)) return prev;
+      return sortedRows[0].id;
+    });
+  }, [isDeepLinked, sortedRows]);
 
   const sourceCounts = useMemo(() => {
     return {
@@ -504,6 +549,8 @@ export default function WindowsAnalysisPage() {
     setChannelFilter("all");
     setSearchQuery("");
     setShowOnlyAnomalous(false);
+    setWindowStartFilter(null);
+    setWindowEndFilter(null);
   };
 
   useEffect(() => {
@@ -577,6 +624,25 @@ export default function WindowsAnalysisPage() {
       {error && (
         <div style={{ padding: 12, background: "#3d1a1a", border: "1px solid #8b3d3d", borderRadius: 4, color: "#ff6b6b", fontSize: 11, marginBottom: 18 }}>
           {error}
+        </div>
+      )}
+
+      {isDeepLinked && (windowStartFilter || windowEndFilter) && (
+        <div style={{ padding: "8px 10px", background: "#101622", border: "1px solid #233750", borderRadius: 4, color: "#a9c5e1", fontSize: 11, marginBottom: 12, display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+          <span>
+            Deep-link active: window filter {windowStartFilter ? new Date(windowStartFilter).toLocaleString() : "-"}
+            {"  to  "}
+            {windowEndFilter ? new Date(windowEndFilter).toLocaleString() : "-"}
+          </span>
+          <WindowsButton
+            variant="secondary"
+            onClick={() => {
+              setWindowStartFilter(null);
+              setWindowEndFilter(null);
+            }}
+          >
+            CLEAR WINDOW FILTER
+          </WindowsButton>
         </div>
       )}
 

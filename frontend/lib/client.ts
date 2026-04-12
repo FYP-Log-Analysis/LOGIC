@@ -189,8 +189,22 @@ export interface BehavioralParams {
   project_id?: string;
 }
 
+export interface BehavioralDefaults {
+  rate_window_minutes: number;
+  rate_threshold: number;
+  enum_window_hours: number;
+  enum_threshold: number;
+  status_window_minutes: number;
+  status_error_ratio: number;
+  visitor_zscore: number;
+}
+
 export async function runBehavioralAnalysis(params?: BehavioralParams) {
   return apiPost<unknown>("api/analysis/behavioral", params ?? {});
+}
+
+export async function getBehavioralDefaults() {
+  return apiGet<{ defaults: BehavioralDefaults }>("api/analysis/behavioral/defaults");
 }
 
 export async function getBehavioralResults(opts?: Pick<ScopeOpts, "projectId">) {
@@ -609,6 +623,7 @@ export interface WindowsBehavioralResult {
     unique_users: number;
     unique_source_ips: number;
     anomaly_score: number | null;
+    anomaly_severity?: string;
     is_anomalous: boolean;
   }>;
   status: string;
@@ -616,6 +631,7 @@ export interface WindowsBehavioralResult {
 
 export async function runWindowsBehavioralAnalysis(params?: {
   window_minutes?: number;
+  contamination?: number;
   project_id?: string;
   upload_id?: string;
   start_ts?: string;
@@ -666,6 +682,74 @@ export async function getWindowsBehavioralWindowEvents(params: {
       [key: string]: unknown;
     }>;
   }>(`api/analysis/windows/behavioral/window-events?${q.toString()}`);
+}
+
+export interface WindowsBehavioralWindowFindings {
+  project_id: string;
+  upload_id: string;
+  window_start: string;
+  window_end: string;
+  window_minutes: number;
+  behavioral_window: WindowsBehavioralResult["windows"][number] | null;
+  total_events: number;
+  events: Array<{
+    timestamp?: string;
+    computer?: string;
+    channel?: string;
+    event_id?: number | string;
+    auth_user?: string;
+    client_ip?: string;
+    level?: string;
+    message?: string;
+    [key: string]: unknown;
+  }>;
+  sigma_matches: Array<{
+    rule_id?: string;
+    rule_title?: string;
+    severity?: string;
+    timestamp?: string;
+    computer?: string;
+    event_id?: number | string;
+    channel?: string;
+    mitre_techniques?: Array<{ technique_id?: string; name?: string; tactic?: string }>;
+    entry?: Record<string, unknown>;
+    [key: string]: unknown;
+  }>;
+  sigma_summary: {
+    total_matches: number;
+    returned_matches: number;
+    unique_rules: number;
+    highest_severity: string;
+    severity_breakdown: Record<string, number>;
+  };
+  cross_detection: {
+    is_anomalous_window: boolean;
+    has_sigma_matches: boolean;
+    has_both: boolean;
+  };
+}
+
+export async function getWindowsBehavioralWindowFindings(params: {
+  projectId?: string;
+  uploadId?: string;
+  windowStart: string;
+  windowMinutes: number;
+  eventLimit?: number;
+  sigmaLimit?: number;
+  includeSigma?: boolean;
+  includeSigmaEntry?: boolean;
+}) {
+  const q = new URLSearchParams();
+  if (params.projectId) q.set("project_id", params.projectId);
+  if (params.uploadId) q.set("upload_id", params.uploadId);
+  q.set("window_start", params.windowStart);
+  q.set("window_minutes", String(params.windowMinutes));
+  q.set("event_limit", String(params.eventLimit ?? 250));
+  q.set("sigma_limit", String(params.sigmaLimit ?? 200));
+  if (params.includeSigma != null) q.set("include_sigma", String(params.includeSigma));
+  if (params.includeSigmaEntry != null) q.set("include_sigma_entry", String(params.includeSigmaEntry));
+
+  return apiGet<WindowsBehavioralWindowFindings>(`api/analysis/windows/behavioral/window-findings?${q.toString()}`);
 }
 
 export interface WindowsEventExplanationResponse {

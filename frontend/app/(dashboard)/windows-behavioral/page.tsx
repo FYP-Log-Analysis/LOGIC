@@ -4,8 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import {
   runWindowsBehavioralAnalysis,
   getWindowsBehavioralResults,
+  getWindowsBehavioralWindowFindings,
   getWindowsBehavioralWindowEvents,
 } from "@/lib/client";
+import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/store";
 import LineChart from "@/components/charts/line-chart";
 import {
@@ -46,11 +48,14 @@ interface WindowsBehavioralResult {
 
 type DetailBlockKey =
   | "timeline"
-  | "allWindows"
   | "anomalousWindows"
-  | "selectedWindow";
+  | "selectedWindow"
+  | "sigmaFindings";
+
+type WindowFindings = Awaited<ReturnType<typeof getWindowsBehavioralWindowFindings>>;
 
 export default function WindowsBehavioralPage() {
+  const router = useRouter();
   const { activeProject } = useAuthStore();
   const isCompact = true;
   const [loading, setLoading] = useState(true);
@@ -61,15 +66,14 @@ export default function WindowsBehavioralPage() {
   const [startTs, setStartTs] = useState("");
   const [endTs, setEndTs] = useState("");
   const [selectedWindowStart, setSelectedWindowStart] = useState<string | null>(null);
-  const [selectedWindowEvents, setSelectedWindowEvents] = useState<Array<Record<string, unknown>>>([]);
-  const [selectedWindowTotal, setSelectedWindowTotal] = useState(0);
+  const [selectedWindowFindings, setSelectedWindowFindings] = useState<WindowFindings | null>(null);
   const [selectedWindowLoading, setSelectedWindowLoading] = useState(false);
   const [selectedWindowError, setSelectedWindowError] = useState("");
   const [expandedDetails, setExpandedDetails] = useState<Record<DetailBlockKey, boolean>>({
     timeline: false,
-    allWindows: false,
     anomalousWindows: false,
     selectedWindow: false,
+    sigmaFindings: false,
   });
 
   const detailsBoxStyle: React.CSSProperties = {
@@ -144,7 +148,7 @@ export default function WindowsBehavioralPage() {
     }
     setSelectedWindowStart((prev) => {
       if (prev && windows.some((w) => w.window_start === prev)) return prev;
-      return windows[0].window_start;
+      return windows.find((w) => w.is_anomalous)?.window_start ?? windows[0].window_start;
     });
   }, [result?.windows]);
 
@@ -154,24 +158,72 @@ export default function WindowsBehavioralPage() {
     let cancelled = false;
     setSelectedWindowLoading(true);
     setSelectedWindowError("");
+    setSelectedWindowFindings(null);
 
-    getWindowsBehavioralWindowEvents({
+    const fallbackWindow = (result?.windows || []).find((w) => w.window_start === selectedWindowStart) || null;
+
+    getWindowsBehavioralWindowFindings({
       projectId: activeProject.id,
       uploadId: selectedUploadId,
       windowStart: selectedWindowStart,
       windowMinutes: selectedWindowMinutes,
-      limit: 250,
+      eventLimit: 500,
+      sigmaLimit: 250,
+      includeSigma: true,
+      includeSigmaEntry: true,
     })
       .then((payload) => {
         if (cancelled) return;
-        setSelectedWindowEvents((payload.events ?? []) as Array<Record<string, unknown>>);
-        setSelectedWindowTotal(payload.total_events ?? 0);
+        setSelectedWindowFindings(payload);
       })
-      .catch((e) => {
+      .catch(async () => {
         if (cancelled) return;
-        setSelectedWindowEvents([]);
-        setSelectedWindowTotal(0);
-        setSelectedWindowError(e instanceof Error ? e.message : String(e));
+
+        // Keep the page usable if cross-detection enrichment is unavailable.
+        try {
+          const fallbackPayload = await getWindowsBehavioralWindowEvents({
+            projectId: activeProject.id,
+            uploadId: selectedUploadId,
+            windowStart: selectedWindowStart,
+            windowMinutes: selectedWindowMinutes,
+            limit: 500,
+          });
+          if (cancelled) return;
+
+          setSelectedWindowFindings({
+            project_id: fallbackPayload.project_id,
+            upload_id: fallbackPayload.upload_id,
+            window_start: fallbackPayload.window_start,
+            window_end: fallbackPayload.window_end,
+            window_minutes: fallbackPayload.window_minutes,
+            behavioral_window: fallbackWindow,
+            total_events: fallbackPayload.total_events,
+            events: fallbackPayload.events,
+            sigma_matches: [],
+            sigma_summary: {
+              total_matches: 0,
+              returned_matches: 0,
+              unique_rules: 0,
+              highest_severity: "none",
+              severity_breakdown: {
+                critical: 0,
+                high: 0,
+                medium: 0,
+                low: 0,
+              },
+            },
+            cross_detection: {
+              is_anomalous_window: Boolean(fallbackWindow?.is_anomalous),
+              has_sigma_matches: false,
+              has_both: false,
+            },
+          });
+          setSelectedWindowError("Cross-detection context is unavailable. Showing window events only.");
+        } catch (fallbackError) {
+          if (cancelled) return;
+          setSelectedWindowFindings(null);
+          setSelectedWindowError(fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
+        }
       })
       .finally(() => {
         if (!cancelled) setSelectedWindowLoading(false);
@@ -180,7 +232,7 @@ export default function WindowsBehavioralPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeProject?.id, selectedUploadId, selectedWindowMinutes, selectedWindowStart]);
+  }, [activeProject?.id, selectedUploadId, selectedWindowMinutes, selectedWindowStart, result?.windows]);
 
   const handleRun = async () => {
     if (!activeProject?.id) return;
@@ -245,16 +297,6 @@ export default function WindowsBehavioralPage() {
     ? (anomalousWindows.reduce((sum, w) => sum + (w.anomaly_score || 0), 0) / anomalousWindows.length * 100).toFixed(1)
     : "0.0";
 
-  const allWindowsTableData = allWindows.map((w) => ({
-    time: new Date(w.window_start).toLocaleString(),
-    events: w.event_count.toLocaleString(),
-    computers: w.unique_computers,
-    users: w.unique_users,
-    ips: w.unique_source_ips,
-    score: w.anomaly_score !== null ? `${(w.anomaly_score * 100).toFixed(1)}%` : "N/A",
-    anomaly: w.is_anomalous ? "YES" : "NO",
-  }));
-
   const anomalousTableData = anomalousWindows.slice(0, 50).map((w) => ({
     time: new Date(w.window_start).toLocaleString(),
     events: w.event_count.toLocaleString(),
@@ -267,9 +309,21 @@ export default function WindowsBehavioralPage() {
   const selectedWindow = selectedWindowStart
     ? allWindows.find((w) => w.window_start === selectedWindowStart) || null
     : null;
-  const selectedWindowRowIndex = selectedWindowStart
-    ? allWindows.findIndex((w) => w.window_start === selectedWindowStart)
+  const selectedAnomalousRowIndex = selectedWindowStart
+    ? anomalousWindows.findIndex((w) => w.window_start === selectedWindowStart)
     : -1;
+
+  const selectedWindowEvents = selectedWindowFindings?.events ?? [];
+  const selectedWindowTotal = selectedWindowFindings?.total_events ?? 0;
+  const selectedWindowSigmaMatches = selectedWindowFindings?.sigma_matches ?? [];
+
+  const selectedSigmaRows = selectedWindowSigmaMatches.slice(0, 100).map((match) => ({
+    time: match.timestamp ? new Date(String(match.timestamp)).toLocaleString() : "—",
+    severity: String(match.severity ?? "unknown").toUpperCase(),
+    rule: match.rule_title ?? match.rule_id ?? "unknown",
+    computer: match.computer ?? "—",
+    event_id: match.event_id ?? "—",
+  }));
 
   const selectedWindowEventsTable = selectedWindowEvents.map((evt) => ({
     timestamp: evt.timestamp ? new Date(String(evt.timestamp)).toLocaleString() : "—",
@@ -279,6 +333,16 @@ export default function WindowsBehavioralPage() {
     user: evt.auth_user ?? "—",
     ip: evt.client_ip ?? "—",
   }));
+
+  const openInRuleBasedDetection = () => {
+    if (!selectedWindowFindings) return;
+    const q = new URLSearchParams();
+    q.set("source", "behavioral");
+    q.set("window_start", selectedWindowFindings.window_start);
+    q.set("window_end", selectedWindowFindings.window_end);
+    q.set("anomalous_only", "true");
+    router.push(`/windows-analysis?${q.toString()}`);
+  };
 
   return (
     <main className="page-shell">
@@ -356,45 +420,13 @@ export default function WindowsBehavioralPage() {
                   labels={timelineLabels}
                   datasets={timelineDatasets}
                   yLabel="Value"
+                  onPointClick={(pointIndex) => setSelectedWindowStart(timelineWindows[pointIndex]?.window_start ?? null)}
                 />
               </div>
             </WindowsDataPanel>
           )}
 
           {timelineLabels.length > 0 && <WindowsDivider />}
-
-          <WindowsDataPanel
-            title="All Time Windows (Select To Inspect)"
-            actions={renderDetailsButton("allWindows", "All Time Windows")}
-          >
-            {expandedDetails.allWindows && (
-              <div style={detailsBoxStyle}>
-                Every row is one analysis window. Click any row to load the exact raw events for that period in the Selected Window block below.
-              </div>
-            )}
-            <div style={{ fontSize: "11px", color: "#888", marginBottom: "8px" }}>
-              Click a window row to view the exact events inside that time window.
-            </div>
-            <WindowsEventTable
-              columns={[
-                { key: "time", label: "Time Window", width: "24%" },
-                { key: "events", label: "Events", width: "11%" },
-                { key: "computers", label: "Computers", width: "11%" },
-                { key: "users", label: "Users", width: "11%" },
-                { key: "ips", label: "IPs", width: "11%" },
-                { key: "score", label: "Anomaly Score", width: "14%" },
-                { key: "anomaly", label: "Anomalous", width: "10%" },
-              ]}
-              data={allWindowsTableData}
-              onRowClick={(_, idx) => setSelectedWindowStart(allWindows[idx]?.window_start ?? null)}
-              selectedRowIndex={selectedWindowRowIndex}
-              emptyMessage="No time windows available"
-              density={isCompact ? "compact" : "comfortable"}
-              maxHeight={isCompact ? 360 : undefined}
-            />
-          </WindowsDataPanel>
-
-          <WindowsDivider />
 
           {/* Anomalous Windows Table */}
           {anomalousWindows.length > 0 ? (
@@ -405,7 +437,7 @@ export default function WindowsBehavioralPage() {
             >
               {expandedDetails.anomalousWindows && (
                 <div style={detailsBoxStyle}>
-                  This is a filtered view of only flagged windows (highest risk first in your workflow). Use it to jump quickly to suspicious periods without scanning the full table.
+                  This view shows only flagged windows. Click a row or click a timeline point above to inspect that period and cross-check Sigma findings.
                 </div>
               )}
               <WindowsEventTable
@@ -419,6 +451,7 @@ export default function WindowsBehavioralPage() {
                 ]}
                 data={anomalousTableData}
                 onRowClick={(_, idx) => setSelectedWindowStart(anomalousWindows[idx]?.window_start ?? null)}
+                selectedRowIndex={selectedAnomalousRowIndex}
                 emptyMessage="No anomalous windows detected"
                 density={isCompact ? "compact" : "comfortable"}
                 maxHeight={isCompact ? 320 : undefined}
@@ -441,10 +474,10 @@ export default function WindowsBehavioralPage() {
               >
                 {expandedDetails.selectedWindow && (
                   <div style={detailsBoxStyle}>
-                    This block is the drill-down view for one chosen window. Top metrics summarize that window, and the table lists sampled raw events so you can validate why the model flagged it.
+                    This block is the drill-down view for one chosen window. It combines behavioral metrics, Sigma overlap summary, and raw events for triage.
                   </div>
                 )}
-                <WindowsStatGrid columns={4}>
+                <WindowsStatGrid columns={5}>
                   <WindowsMetricCard label="Events In Window" value={selectedWindow.event_count.toLocaleString()} />
                   <WindowsMetricCard label="Unique Event IDs" value={selectedWindow.unique_event_ids.toLocaleString()} />
                   <WindowsMetricCard
@@ -456,7 +489,18 @@ export default function WindowsBehavioralPage() {
                     label="Anomaly Flag"
                     value={selectedWindow.is_anomalous ? "YES" : "NO"}
                   />
+                  <WindowsMetricCard
+                    label="Sigma Matches"
+                    value={String(selectedWindowFindings?.sigma_summary.total_matches ?? 0)}
+                    sublabel={`${selectedWindowFindings?.sigma_summary.unique_rules ?? 0} unique rules`}
+                  />
                 </WindowsStatGrid>
+
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10, marginBottom: 10 }}>
+                  <WindowsButton variant="secondary" onClick={openInRuleBasedDetection}>
+                    OPEN IN RULE BASED DETECTION
+                  </WindowsButton>
+                </div>
 
                 {selectedWindowError && (
                   <div style={{ padding: "12px", background: "#3d1a1a", border: "1px solid #8b3d3d", borderRadius: "4px", color: "#ff6b6b", fontSize: "11px" }}>
@@ -468,6 +512,35 @@ export default function WindowsBehavioralPage() {
                   <WindowsLoadingSkeleton count={2} height={60} />
                 ) : (
                   <>
+                    <WindowsDataPanel
+                      title="Sigma Findings In Selected Window"
+                      accent="#79a84e"
+                      actions={renderDetailsButton("sigmaFindings", "Sigma Findings In Selected Window")}
+                    >
+                      {expandedDetails.sigmaFindings && (
+                        <div style={detailsBoxStyle}>
+                          These are rule-based detections that occurred in the exact selected behavioral window. Prioritize windows where anomaly and Sigma both trigger.
+                        </div>
+                      )}
+                      <div style={{ fontSize: "11px", color: "#888", marginBottom: "6px" }}>
+                        Showing {selectedSigmaRows.length.toLocaleString()} of {(selectedWindowFindings?.sigma_summary.total_matches ?? 0).toLocaleString()} sigma matches in this window.
+                      </div>
+                      <WindowsEventTable
+                        columns={[
+                          { key: "time", label: "Timestamp", width: "24%" },
+                          { key: "severity", label: "Severity", width: "12%" },
+                          { key: "rule", label: "Rule", width: "34%" },
+                          { key: "computer", label: "Computer", width: "16%" },
+                          { key: "event_id", label: "Event ID", width: "14%" },
+                        ]}
+                        data={selectedSigmaRows}
+                        emptyMessage="No Sigma findings in this window"
+                        density="compact"
+                        maxHeight={isCompact ? 240 : undefined}
+                      />
+                    </WindowsDataPanel>
+
+                    <WindowsDivider />
                     <div style={{ fontSize: "11px", color: "#888", marginBottom: "6px" }}>
                       Showing {selectedWindowEventsTable.length.toLocaleString()} of {selectedWindowTotal.toLocaleString()} events in this window.
                     </div>
@@ -495,7 +568,7 @@ export default function WindowsBehavioralPage() {
           {result?.status && result.status !== "ok" && (
             <div style={{ marginTop: 20, padding: "12px", background: "#2a2410", border: "1px solid #5a5020", borderRadius: "4px", fontSize: "11px", color: "#f0c040" }}>
               Status: {result.status.toUpperCase().replace(/_/g, " ")}
-              {result.status.includes("insufficient") && " — Not enough data for ML model (need ≥5 windows)"}
+              {result.status.includes("insufficient") && " — Not enough data for ML model (need ≥20 windows)"}
               {result.status.includes("unavailable") && " — scikit-learn not available"}
             </div>
           )}

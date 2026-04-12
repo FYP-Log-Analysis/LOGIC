@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-29T13:41:36Z",
+  "generated_at": "2026-04-12T10:08:47Z",
   "start_ts": null,
   "end_ts": null,
   "thresholds": {
@@ -12,6 +12,9 @@
     "visitor_zscore": 2.0
   },
   "summary": {
+    "total_rate_spikes": 3,
+    "total_url_enumerators": 0,
+    "total_status_spikes": 1,
     "total_rate_spike_windows": 3,
     "total_enumeration_alerts": 0,
     "total_status_spike_windows": 1,

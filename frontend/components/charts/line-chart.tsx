@@ -1,6 +1,7 @@
 "use client";
 
 import { Line } from "react-chartjs-2";
+import type { ChartOptions } from "chart.js";
 import "@/components/charts/setup";
 import { DARK_DEFAULTS } from "@/components/charts/setup";
 
@@ -19,6 +20,7 @@ interface LineChartProps {
   threshold?: number;
   thresholdLabel?: string;
   height?: number;
+  onPointClick?: (pointIndex: number) => void;
 }
 
 export default function LineChart({
@@ -29,6 +31,7 @@ export default function LineChart({
   threshold,
   thresholdLabel,
   height = 280,
+  onPointClick,
 }: LineChartProps) {
   const chartData = {
     labels,
@@ -65,6 +68,10 @@ export default function LineChart({
 
   const options = {
     ...DARK_DEFAULTS,
+    onClick: (_event: unknown, elements: Array<{ index: number }>) => {
+      if (!onPointClick || !elements || elements.length === 0) return;
+      onPointClick(elements[0].index);
+    },
     plugins: {
       ...DARK_DEFAULTS.plugins,
       title: title
@@ -90,7 +97,7 @@ export default function LineChart({
           : { display: false },
       },
     },
-  };
+  } as ChartOptions<"line">;
 
   return (
     <div style={{ height, width: "100%" }}>

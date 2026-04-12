@@ -10,6 +10,7 @@ import ijson
 
 try:
     from sklearn.ensemble import IsolationForest
+    from sklearn.preprocessing import StandardScaler
     _SKLEARN_AVAILABLE = True
 except Exception:
     _SKLEARN_AVAILABLE = False
@@ -74,12 +75,23 @@ def _extract_features(events: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _anomaly_severity(anomaly_score: float | None, is_anomalous: bool) -> str:
+    if not is_anomalous or anomaly_score is None:
+        return "low"
+    if anomaly_score <= -0.20:
+        return "critical"
+    if anomaly_score <= -0.10:
+        return "high"
+    return "medium"
+
+
 def run_windows_ml_analysis(
     project_id: str,
     upload_id: str,
     window_minutes: int = 5,
     start_ts: str | None = None,
     end_ts: str | None = None,
+    contamination: float = 0.1,
 ) -> dict[str, Any]:
     upload_dir = PROJECTS_ROOT / project_id / "uploads" / upload_id
     normalized_path = upload_dir / "normalized.json"
@@ -121,12 +133,13 @@ def run_windows_ml_analysis(
         feature_row["window_start"] = window_start
         rows.append(feature_row)
 
-    if not _SKLEARN_AVAILABLE or len(rows) < 5:
+    if not _SKLEARN_AVAILABLE or len(rows) < 20:
         windows = [
             {
                 **row,
                 "anomaly_score": None,
                 "is_anomalous": False,
+                "anomaly_severity": "low",
             }
             for row in rows
         ]
@@ -137,7 +150,13 @@ def run_windows_ml_analysis(
             "total_windows": len(rows),
             "anomalous_windows": 0,
             "windows": windows,
-            "status": "ok:insufficient_baseline" if len(rows) < 5 else "ok:sklearn_unavailable",
+            "status": "ok:insufficient_baseline" if len(rows) < 20 else "ok:sklearn_unavailable",
+            "model": {
+                "type": "isolation_forest",
+                "scaled_features": False,
+                "contamination": float(contamination),
+                "min_windows_required": 20,
+            },
         }
         with open(out_path, "w", encoding="utf-8") as fh:
             json.dump(payload, fh, indent=2)
@@ -161,22 +180,33 @@ def run_windows_ml_analysis(
         for r in rows
     ]
 
-    model = IsolationForest(n_estimators=100, contamination=0.1, random_state=42)
-    model.fit(matrix)
-    scores = model.decision_function(matrix)
-    labels = model.predict(matrix)
+    safe_contamination = float(contamination)
+    if not (0.0 < safe_contamination < 0.5):
+        safe_contamination = 0.1
+
+    scaled_matrix = StandardScaler().fit_transform(matrix)
+    model = IsolationForest(
+        n_estimators=100,
+        contamination=safe_contamination,
+        random_state=42,
+    )
+    model.fit(scaled_matrix)
+    scores = model.decision_function(scaled_matrix)
+    labels = model.predict(scaled_matrix)
 
     windows = []
     anomalous = 0
     for idx, row in enumerate(rows):
         is_anomalous = labels[idx] == -1
+        anomaly_score = float(scores[idx])
         if is_anomalous:
             anomalous += 1
         windows.append(
             {
                 **row,
-                "anomaly_score": float(scores[idx]),
+                "anomaly_score": anomaly_score,
                 "is_anomalous": bool(is_anomalous),
+                "anomaly_severity": _anomaly_severity(anomaly_score, bool(is_anomalous)),
             }
         )
 
@@ -188,6 +218,12 @@ def run_windows_ml_analysis(
         "anomalous_windows": anomalous,
         "windows": windows,
         "status": "ok",
+        "model": {
+            "type": "isolation_forest",
+            "scaled_features": True,
+            "contamination": safe_contamination,
+            "min_windows_required": 20,
+        },
     }
     with open(out_path, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2)

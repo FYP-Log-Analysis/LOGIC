@@ -453,6 +453,9 @@ def run_behavioral_analysis(
             "visitor_zscore":        visitor_zscore,
         },
         "summary": {
+            "total_rate_spikes":           len(rate_spikes),
+            "total_url_enumerators":       len(url_enum),
+            "total_status_spikes":         len(status_spikes),
             "total_rate_spike_windows":    len(rate_spikes),
             "total_enumeration_alerts":    len(url_enum),
             "total_status_spike_windows":  len(status_spikes),

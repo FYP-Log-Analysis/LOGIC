@@ -2,6 +2,7 @@
 API routes for behavioral traffic analysis.
 
 POST /api/analysis/behavioral          — run all 4 behavioral detections
+GET  /api/analysis/behavioral/defaults — default analysis thresholds
 GET  /api/analysis/behavioral/results  — return the latest behavioral_results.json
 GET  /api/analysis/behavioral/alerts   — query SQLite behavioral_alerts table
 """
@@ -11,10 +12,10 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from api.deps import UserInDB, get_current_user
 from api.routes.projects import _normalize_project_id
 
@@ -64,6 +65,19 @@ class BehavioralRequest(BaseModel):
     project_id:             Optional[str] = None
 
 
+def _behavioral_defaults() -> dict:
+    req = BehavioralRequest()
+    return {
+        "rate_window_minutes": req.rate_window_minutes,
+        "rate_threshold": req.rate_threshold,
+        "enum_window_hours": req.enum_window_hours,
+        "enum_threshold": req.enum_threshold,
+        "status_window_minutes": req.status_window_minutes,
+        "status_error_ratio": req.status_error_ratio,
+        "visitor_zscore": req.visitor_zscore,
+    }
+
+
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
 @router.post("/behavioral")
@@ -94,6 +108,12 @@ def run_behavioral(req: BehavioralRequest, _user: UserInDB = Depends(get_current
     except Exception as exc:
         logger.exception("Behavioral analysis failed")
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/behavioral/defaults")
+def get_behavioral_defaults(_user: UserInDB = Depends(get_current_user)):
+    """Return default behavioral analysis threshold values."""
+    return {"defaults": _behavioral_defaults()}
 
 
 @router.get("/behavioral/results")
@@ -151,6 +171,7 @@ def get_behavioral_alerts_route(
 
 class WindowsBehavioralRequest(BaseModel):
     window_minutes: int = 5
+    contamination: float = Field(0.1, ge=0.001, le=0.499)
     project_id: Optional[str] = None
     upload_id: Optional[str] = None
     start_ts: Optional[str] = None
@@ -191,6 +212,7 @@ def run_windows_behavioral(
             window_minutes=req.window_minutes,
             start_ts=req.start_ts,
             end_ts=req.end_ts,
+            contamination=req.contamination,
         )
         return {
             "status": "complete",
@@ -253,6 +275,15 @@ def _parse_iso_utc(value: str | None) -> datetime | None:
         return dt
     except Exception:
         return None
+
+
+def _severity_rank(value: str | None) -> int:
+    return {
+        "critical": 4,
+        "high": 3,
+        "medium": 2,
+        "low": 1,
+    }.get(str(value or "").lower(), 0)
 
 
 @router.get("/windows/behavioral/window-events")
@@ -338,4 +369,175 @@ def get_windows_behavioral_window_events(
         "window_minutes": window_minutes,
         "total_events": total_events,
         "events": sampled_events,
+    }
+
+
+@router.get("/windows/behavioral/window-findings")
+def get_windows_behavioral_window_findings(
+    project_id: Optional[str] = Query(None, description="Scope to a specific project"),
+    upload_id: Optional[str] = Query(None, description="Target a specific upload"),
+    window_start: Optional[str] = Query(None, description="Window start (ISO 8601)"),
+    start_ts: Optional[str] = Query(None, description="Backward-compatible alias for window_start"),
+    window_minutes: int = Query(5, ge=1, le=180, description="Window size in minutes"),
+    event_limit: int = Query(250, ge=1, le=5000, description="Max matching window events returned"),
+    sigma_limit: int = Query(200, ge=1, le=5000, description="Max overlapping sigma matches returned"),
+    include_sigma: bool = Query(True, description="Include Sigma overlaps for the selected window"),
+    include_sigma_entry: bool = Query(False, description="Include raw Sigma event payload entry"),
+    _user: UserInDB = Depends(get_current_user),
+):
+    """Return one selected behavioral window with raw events and overlapping Sigma findings."""
+    import ijson
+
+    project_id = _normalize_project_id(project_id)
+    _assert_project_type(project_id, "windows")
+
+    selected_start_raw = window_start or start_ts
+    selected_start = _parse_iso_utc(selected_start_raw)
+    if not selected_start:
+        raise HTTPException(status_code=400, detail="window_start (or start_ts) must be a valid ISO 8601 timestamp.")
+
+    if not upload_id:
+        from core.storage.sqlite_store import get_uploads_for_project
+
+        uploads = get_uploads_for_project(project_id)
+        for upload in uploads:
+            if upload.get("status") == "complete":
+                upload_id = upload["upload_id"]
+                break
+
+    if not upload_id:
+        raise HTTPException(status_code=404, detail=f"No uploads found for project '{project_id}'.")
+
+    base_dir = _PROJECT_ROOT / "data" / "projects" / project_id / "uploads" / upload_id
+    normalized_path = base_dir / "normalized.json"
+    behavioral_path = base_dir / "windows_ml_anomalies.json"
+    sigma_path = base_dir / "windows_sigma_matches.json"
+
+    if not normalized_path.exists():
+        raise HTTPException(status_code=404, detail="No normalized Windows log data found for selected upload.")
+
+    selected_end = selected_start + timedelta(minutes=window_minutes)
+
+    # Resolve selected window aggregate from behavioral output when available.
+    selected_window: dict[str, Any] | None = None
+    if behavioral_path.exists():
+        try:
+            with open(behavioral_path, "r", encoding="utf-8") as fh:
+                behavioral_payload = json.load(fh)
+            for row in behavioral_payload.get("windows", []):
+                row_start = _parse_iso_utc(row.get("window_start"))
+                if row_start and row_start == selected_start:
+                    selected_window = row
+                    break
+        except Exception:
+            selected_window = None
+
+    sampled_events: list[dict[str, Any]] = []
+    total_events = 0
+    try:
+        with open(normalized_path, "rb") as fh:
+            for entry in ijson.items(fh, "item"):
+                if entry.get("server_type") != "windows_event":
+                    continue
+
+                event_ts = _parse_iso_utc(entry.get("timestamp"))
+                if not event_ts:
+                    continue
+                if not (selected_start <= event_ts < selected_end):
+                    continue
+
+                total_events += 1
+                if len(sampled_events) < event_limit:
+                    sampled_events.append(
+                        {
+                            "timestamp": entry.get("timestamp"),
+                            "computer": entry.get("computer"),
+                            "channel": entry.get("channel"),
+                            "event_id": entry.get("event_id"),
+                            "auth_user": entry.get("auth_user"),
+                            "client_ip": entry.get("client_ip"),
+                            "level": entry.get("level"),
+                            "message": entry.get("message"),
+                            "entry": entry,
+                        }
+                    )
+    except Exception as exc:
+        logger.exception("Failed to read window findings events for project=%s upload=%s", project_id, upload_id)
+        raise HTTPException(status_code=500, detail=f"Could not extract window events: {exc}")
+
+    sigma_matches: list[dict[str, Any]] = []
+    sigma_total_matches = 0
+    sigma_rules: set[str] = set()
+    severity_breakdown: dict[str, int] = {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+    }
+
+    if include_sigma and sigma_path.exists():
+        try:
+            with open(sigma_path, "r", encoding="utf-8") as fh:
+                sigma_payload = json.load(fh)
+            for match in sigma_payload.get("matches", []):
+                match_ts = _parse_iso_utc(match.get("timestamp"))
+                if not match_ts:
+                    continue
+                if not (selected_start <= match_ts < selected_end):
+                    continue
+
+                sigma_total_matches += 1
+                sigma_rules.add(str(match.get("rule_id") or match.get("rule_title") or "unknown"))
+
+                severity = str(match.get("severity") or "low").lower()
+                if severity in severity_breakdown:
+                    severity_breakdown[severity] += 1
+
+                if len(sigma_matches) < sigma_limit:
+                    row = dict(match)
+                    if not include_sigma_entry and "entry" in row:
+                        row.pop("entry", None)
+                    sigma_matches.append(row)
+        except Exception:
+            sigma_matches = []
+            sigma_total_matches = 0
+            sigma_rules = set()
+            severity_breakdown = {
+                "critical": 0,
+                "high": 0,
+                "medium": 0,
+                "low": 0,
+            }
+
+    highest_severity = "none"
+    if sigma_total_matches > 0:
+        highest_severity = max(
+            severity_breakdown,
+            key=lambda sev: _severity_rank(sev) if severity_breakdown.get(sev, 0) > 0 else -1,
+        )
+
+    is_anomalous = bool(selected_window.get("is_anomalous")) if selected_window else False
+
+    return {
+        "project_id": project_id,
+        "upload_id": upload_id,
+        "window_start": selected_start.isoformat(),
+        "window_end": selected_end.isoformat(),
+        "window_minutes": window_minutes,
+        "behavioral_window": selected_window,
+        "total_events": total_events,
+        "events": sampled_events,
+        "sigma_matches": sigma_matches,
+        "sigma_summary": {
+            "total_matches": sigma_total_matches,
+            "returned_matches": len(sigma_matches),
+            "unique_rules": len(sigma_rules),
+            "highest_severity": highest_severity,
+            "severity_breakdown": severity_breakdown,
+        },
+        "cross_detection": {
+            "is_anomalous_window": is_anomalous,
+            "has_sigma_matches": sigma_total_matches > 0,
+            "has_both": is_anomalous and sigma_total_matches > 0,
+        },
     }

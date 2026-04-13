@@ -203,7 +203,16 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, setUser, hydrated, setHydrated, activeProject, timeRange } = useAuthStore();
+  const {
+    user,
+    setUser,
+    hydrated,
+    setHydrated,
+    activeProject,
+    timeRange,
+    assistantFocus,
+    clearAssistantFocus,
+  } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -236,6 +245,10 @@ export default function DashboardLayout({
         .catch(() => router.push("/login"));
     }
   }, [hydrated, user, setUser, router]);
+
+  useEffect(() => {
+    clearAssistantFocus();
+  }, [pathname, clearAssistantFocus]);
 
   if (!hydrated || !user) {
     return (
@@ -319,6 +332,7 @@ export default function DashboardLayout({
         }}
         componentKey={`global${pathname || "/dashboard"}`}
         helpGuide="Ask about the current page, detections, anomalies, timelines, or next investigation actions."
+        selectedContext={assistantFocus}
       />
     </div>
   );

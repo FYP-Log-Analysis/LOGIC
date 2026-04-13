@@ -145,6 +145,28 @@ function extractWebLogIocs(match: RuleMatch | null): ExtractedWebIocs {
   };
 }
 
+function toDetectionAssistantContext(match: RuleMatch, rowId: string) {
+  return {
+    id: rowId,
+    kind: "web_detection",
+    sourcePage: "/detections",
+    title: match.rule_title ?? match.rule_id ?? "Detection event",
+    subtitle: `${(match.severity ?? "unknown").toUpperCase()} | ${match.method ?? "-"} ${match.path ?? "-"}`,
+    severity: match.severity,
+    timestamp: match.timestamp,
+    source: "web-crs",
+    payload: match,
+    metadata: {
+      rule_id: match.rule_id ?? null,
+      client_ip: match.client_ip ?? null,
+      method: match.method ?? null,
+      path: match.path ?? null,
+      status_code: match.status_code ?? null,
+    },
+    priority: "critical" as const,
+  };
+}
+
 function loadTriageMap(): Record<string, TriageStatus> {
   try {
     const raw = localStorage.getItem("logic_triage");
@@ -310,12 +332,12 @@ function ThreatTable({
 }: {
   matches: RuleMatch[];
 }) {
+  const { setAssistantFocus, clearAssistantFocus } = useAuthStore();
   const [search, setSearch] = useState("");
   const [sevFilter, setSevFilter] = useState("");
   const [methodFilter, setMethodFilter] = useState("");
   const [successfulOnly, setSuccessfulOnly] = useState(false);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
-  const [selectedMatch, setSelectedMatch] = useState<RuleMatch | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
 
   const severities = [...new Set(matches.map((m) => (m.severity ?? "unknown").toLowerCase()))].sort();
@@ -344,6 +366,12 @@ function ThreatTable({
     })) as Array<Record<string, unknown>>;
   }, [filtered]);
 
+  const selectedMatch = useMemo(() => {
+    if (!selectedRowId) return null;
+    const row = tableRows.find((entry) => String(entry.id ?? "") === selectedRowId);
+    return ((row?.match as RuleMatch | undefined) ?? null);
+  }, [selectedRowId, tableRows]);
+
   const extractedIocs = useMemo(() => extractWebLogIocs(selectedMatch), [selectedMatch]);
   const hasIocs =
     extractedIocs.ips.length > 0 ||
@@ -352,13 +380,10 @@ function ThreatTable({
     extractedIocs.paths.length > 0;
 
   useEffect(() => {
-    if (!selectedRowId) return;
-    const stillVisible = tableRows.some((row) => String(row.id ?? "") === selectedRowId);
-    if (!stillVisible) {
-      setSelectedRowId(null);
-      setSelectedMatch(null);
+    if (selectedRowId && !selectedMatch) {
+      clearAssistantFocus();
     }
-  }, [selectedRowId, tableRows]);
+  }, [clearAssistantFocus, selectedMatch, selectedRowId]);
 
   return (
     <div>
@@ -417,7 +442,11 @@ function ThreatTable({
           const rowId = String(row.id ?? "");
           const match = (row.match ?? null) as RuleMatch | null;
           setSelectedRowId(rowId);
-          setSelectedMatch(match);
+          if (match) {
+            setAssistantFocus(toDetectionAssistantContext(match, rowId));
+          } else {
+            clearAssistantFocus();
+          }
         }}
         columns={[
           {
@@ -535,7 +564,7 @@ function ThreatTable({
                 style={{ fontSize: 10 }}
                 onClick={() => {
                   setSelectedRowId(null);
-                  setSelectedMatch(null);
+                  clearAssistantFocus();
                 }}
               >
                 Clear Selection

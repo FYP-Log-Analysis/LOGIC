@@ -20,6 +20,22 @@ export interface TimeRange {
   to: string;
 }
 
+export type AssistantContextPriority = "critical" | "high" | "medium" | "low";
+
+export interface AssistantFocusContext {
+  id: string;
+  kind: string;
+  sourcePage: string;
+  title: string;
+  subtitle?: string;
+  severity?: string;
+  timestamp?: string;
+  source?: string;
+  payload?: unknown;
+  metadata?: Record<string, unknown>;
+  priority?: AssistantContextPriority;
+}
+
 interface AuthState {
   user: User | null;
   activeProject: ActiveProject | null;
@@ -28,6 +44,7 @@ interface AuthState {
   hydrated: boolean;
   activeLogType: "web" | "windows";
   displayMode: "default" | "compact";
+  assistantFocus: AssistantFocusContext | null;
 
   setUser: (user: User | null) => void;
   setActiveProject: (project: ActiveProject | null) => void;
@@ -36,6 +53,8 @@ interface AuthState {
   setHydrated: (hydrated: boolean) => void;
   setActiveLogType: (logType: "web" | "windows") => void;
   setDisplayMode: (mode: "default" | "compact") => void;
+  setAssistantFocus: (focus: AssistantFocusContext | null) => void;
+  clearAssistantFocus: () => void;
   logout: () => void;
 }
 
@@ -49,6 +68,7 @@ export const useAuthStore = create<AuthState>()(
       hydrated: false,
       activeLogType: "web",
       displayMode: "compact",
+      assistantFocus: null,
 
       setUser: (user) => set({ user }),
       setActiveProject: (project) => set((state) => ({
@@ -60,6 +80,8 @@ export const useAuthStore = create<AuthState>()(
       setHydrated: (hydrated) => set({ hydrated }),
       setActiveLogType: (logType) => set({ activeLogType: logType }),
       setDisplayMode: (mode) => set({ displayMode: mode }),
+      setAssistantFocus: (focus) => set({ assistantFocus: focus }),
+      clearAssistantFocus: () => set({ assistantFocus: null }),
 
       logout: () =>
         set({
@@ -69,6 +91,7 @@ export const useAuthStore = create<AuthState>()(
           timeRange: null,
           activeLogType: "web",
           displayMode: "compact",
+          assistantFocus: null,
         }),
     }),
     {

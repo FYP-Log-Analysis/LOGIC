@@ -56,7 +56,7 @@ type WindowFindings = Awaited<ReturnType<typeof getWindowsBehavioralWindowFindin
 
 export default function WindowsBehavioralPage() {
   const router = useRouter();
-  const { activeProject } = useAuthStore();
+  const { activeProject, setAssistantFocus, clearAssistantFocus } = useAuthStore();
   const isCompact = true;
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -233,6 +233,45 @@ export default function WindowsBehavioralPage() {
       cancelled = true;
     };
   }, [activeProject?.id, selectedUploadId, selectedWindowMinutes, selectedWindowStart, result?.windows]);
+
+  useEffect(() => {
+    if (!selectedWindowStart || !result) {
+      clearAssistantFocus();
+      return;
+    }
+
+    const windowRecord = (result.windows || []).find((w) => w.window_start === selectedWindowStart);
+    if (!windowRecord) {
+      clearAssistantFocus();
+      return;
+    }
+
+    setAssistantFocus({
+      id: `${result.upload_id}:${selectedWindowStart}`,
+      kind: "windows_behavioral_window",
+      sourcePage: "/windows-behavioral",
+      title: `Behavioral Window ${new Date(selectedWindowStart).toLocaleString()}`,
+      subtitle: `ANOMALY ${windowRecord.anomaly_score !== null ? `${(windowRecord.anomaly_score * 100).toFixed(1)}%` : "N/A"}`,
+      severity: windowRecord.is_anomalous ? "high" : "low",
+      timestamp: selectedWindowStart,
+      source: "behavioral-ml",
+      payload: selectedWindowFindings ?? {
+        window: windowRecord,
+      },
+      metadata: {
+        window_start: selectedWindowStart,
+        event_count: windowRecord.event_count,
+        unique_event_ids: windowRecord.unique_event_ids,
+        unique_computers: windowRecord.unique_computers,
+        unique_users: windowRecord.unique_users,
+        unique_source_ips: windowRecord.unique_source_ips,
+        anomaly_score: windowRecord.anomaly_score,
+        is_anomalous: windowRecord.is_anomalous,
+        sigma_matches: selectedWindowFindings?.sigma_summary.total_matches ?? 0,
+      },
+      priority: "critical",
+    });
+  }, [clearAssistantFocus, result, selectedWindowFindings, selectedWindowStart, setAssistantFocus]);
 
   const handleRun = async () => {
     if (!activeProject?.id) return;

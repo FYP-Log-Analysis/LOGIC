@@ -103,7 +103,7 @@ function readField(row: InvestigationRow, field: string): string {
 
 export default function WindowsAnalysisPage() {
   const searchParams = useSearchParams();
-  const { activeProject, displayMode, setDisplayMode } = useAuthStore();
+  const { activeProject, displayMode, setDisplayMode, setAssistantFocus, clearAssistantFocus } = useAuthStore();
   const isCompact = displayMode === "compact";
 
   const [sigmaResults, setSigmaResults] = useState<WindowsSigmaResults | null>(null);
@@ -424,6 +424,36 @@ export default function WindowsAnalysisPage() {
     if (!selectedRowId) return null;
     return sortedRows.find((row) => row.id === selectedRowId) || null;
   }, [sortedRows, selectedRowId]);
+
+  useEffect(() => {
+    if (!selectedRow) {
+      clearAssistantFocus();
+      return;
+    }
+
+    setAssistantFocus({
+      id: selectedRow.id,
+      kind: selectedRow.source === "sigma" ? "windows_sigma_detection" : "windows_behavioral_detection",
+      sourcePage: "/windows-analysis",
+      title: selectedRow.title,
+      subtitle: `${selectedRow.severity.toUpperCase()} | ${(selectedRow.source || "unknown").toUpperCase()}`,
+      severity: selectedRow.severity,
+      timestamp: selectedRow.timestamp,
+      source: selectedRow.source,
+      payload: selectedRow.payload,
+      metadata: {
+        source: selectedRow.source,
+        computer: selectedRow.computer ?? null,
+        event_id: selectedRow.event_id ?? null,
+        channel: selectedRow.channel ?? null,
+        anomaly_score: selectedRow.anomaly_score ?? null,
+        rule_id: selectedRow.rule_id ?? null,
+        mitre_techniques: selectedRow.mitre_techniques ?? [],
+        details_panel_open: showDetailsPanel,
+      },
+      priority: "critical",
+    });
+  }, [clearAssistantFocus, selectedRow, setAssistantFocus, showDetailsPanel]);
 
   useEffect(() => {
     if (!isDeepLinked || sortedRows.length === 0) return;

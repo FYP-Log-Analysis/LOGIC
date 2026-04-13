@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import type { ThreatEvent } from "@/components/threat-timeline";
+import type { AssistantContextPriority, AssistantFocusContext } from "@/lib/store";
 
 interface Message {
   role: "user" | "assistant";
@@ -14,7 +14,27 @@ interface HawkinsChatProps {
   dataSummary?: string | Record<string, unknown>;
   componentKey: string;
   helpGuide?: string;
-  selectedThreat?: ThreatEvent | null;
+  selectedContext?: AssistantFocusContext | null;
+}
+
+type ContextFieldCategory = "selection" | "page" | "project" | "component" | "help";
+
+interface ContextField {
+  name: string;
+  content: string | Record<string, unknown>;
+  priority: AssistantContextPriority;
+  category: ContextFieldCategory;
+}
+
+function normalizeDataSummary(dataSummary?: string | Record<string, unknown>): string | Record<string, unknown> | null {
+  if (!dataSummary) return null;
+  return dataSummary;
+}
+
+function getPageFromSummary(dataSummary?: string | Record<string, unknown>): string | undefined {
+  if (!dataSummary || typeof dataSummary === "string") return undefined;
+  const page = dataSummary.page;
+  return typeof page === "string" ? page : undefined;
 }
 
 function buildContext(props: HawkinsChatProps): string {
@@ -31,28 +51,87 @@ function buildContext(props: HawkinsChatProps): string {
   if (props.helpGuide) {
     lines.push(`HOW_TO_USE:\n${props.helpGuide}`);
   }
-  if (props.selectedThreat) {
-    const payload = props.selectedThreat.payload ?? props.selectedThreat;
+  if (props.selectedContext) {
+    const selectionBlock = {
+      id: props.selectedContext.id,
+      kind: props.selectedContext.kind,
+      source_page: props.selectedContext.sourcePage,
+      title: props.selectedContext.title,
+      subtitle: props.selectedContext.subtitle,
+      severity: props.selectedContext.severity,
+      timestamp: props.selectedContext.timestamp,
+      source: props.selectedContext.source,
+      metadata: props.selectedContext.metadata ?? {},
+      payload: props.selectedContext.payload,
+    };
+
+    lines.push(`SELECTED_CONTEXT:\n${JSON.stringify(selectionBlock, null, 2)}`);
+
+    // Keep the legacy marker for prompt compatibility.
     lines.push(
-      `SELECTED_THREAT:\n${JSON.stringify(
-        {
-          timestamp: props.selectedThreat.timestamp,
-          severity: props.selectedThreat.severity,
-          type: props.selectedThreat.type,
-          title: props.selectedThreat.title,
-          details: props.selectedThreat.details,
-          source: props.selectedThreat.source,
-          payload,
-        },
-        null,
-        2,
-      )}`,
+      `SELECTED_THREAT:\n${JSON.stringify(selectionBlock, null, 2)}`,
     );
     lines.push(
       "RESPONSE_MODE: detailed_forensic_report. Provide evidence-backed reasoning, plausible attack path, confidence level, and prioritized next investigative steps.",
     );
   }
   return lines.join("\n\n");
+}
+
+function buildContextFields(props: HawkinsChatProps): ContextField[] {
+  const fields: ContextField[] = [
+    {
+      name: "component",
+      content: {
+        title: props.title,
+        description: props.description ?? "",
+        component_key: props.componentKey,
+      },
+      priority: "medium",
+      category: "component",
+    },
+  ];
+
+  const summary = normalizeDataSummary(props.dataSummary);
+  if (summary) {
+    fields.push({
+      name: "page_context",
+      content: summary,
+      priority: "high",
+      category: "page",
+    });
+  }
+
+  if (props.helpGuide) {
+    fields.push({
+      name: "help_guide",
+      content: props.helpGuide,
+      priority: "medium",
+      category: "help",
+    });
+  }
+
+  if (props.selectedContext) {
+    fields.unshift({
+      name: "selected_context",
+      content: {
+        id: props.selectedContext.id,
+        kind: props.selectedContext.kind,
+        source_page: props.selectedContext.sourcePage,
+        title: props.selectedContext.title,
+        subtitle: props.selectedContext.subtitle,
+        severity: props.selectedContext.severity,
+        timestamp: props.selectedContext.timestamp,
+        source: props.selectedContext.source,
+        metadata: props.selectedContext.metadata ?? {},
+        payload: props.selectedContext.payload,
+      },
+      priority: props.selectedContext.priority ?? "critical",
+      category: "selection",
+    });
+  }
+
+  return fields;
 }
 
 export default function HawkinsChat(props: HawkinsChatProps) {
@@ -75,6 +154,7 @@ export default function HawkinsChat(props: HawkinsChatProps) {
     setStreaming(true);
 
     const context = buildContext(props);
+    const contextFields = buildContextFields(props);
     let responseText = "";
 
     try {
@@ -83,6 +163,8 @@ export default function HawkinsChat(props: HawkinsChatProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           context,
+          context_fields: contextFields,
+          current_page: getPageFromSummary(props.dataSummary),
           messages: newHistory,
           component_key: props.componentKey,
         }),
@@ -162,9 +244,9 @@ export default function HawkinsChat(props: HawkinsChatProps) {
             <span style={{ color: "#e0e0e0", fontSize: 13, fontWeight: 300, letterSpacing: 1 }}>
               {props.title}
             </span>
-            {props.selectedThreat && (
+            {props.selectedContext && (
               <span style={{ color: "#a78bfa", fontSize: 10, letterSpacing: 1, textTransform: "uppercase" }}>
-                Threat Attached
+                Context Attached
               </span>
             )}
             <button

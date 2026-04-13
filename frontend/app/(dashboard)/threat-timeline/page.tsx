@@ -54,6 +54,25 @@ function toTimelineEvent(match: RuleMatch): ThreatEvent {
   };
 }
 
+function toAssistantContext(event: ThreatEvent) {
+  return {
+    id: `${event.timestamp}:${event.title}`,
+    kind: "threat_timeline_event",
+    sourcePage: "/threat-timeline",
+    title: event.title,
+    subtitle: `${event.severity.toUpperCase()} | ${event.type.toUpperCase()}`,
+    severity: event.severity,
+    timestamp: event.timestamp,
+    source: event.source,
+    payload: event.payload ?? event,
+    metadata: {
+      type: event.type,
+      details: event.details ?? null,
+    },
+    priority: "critical" as const,
+  };
+}
+
 export default function ThreatTimelinePage() {
   const [matches, setMatches] = useState<RuleMatch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +83,7 @@ export default function ThreatTimelinePage() {
   const [sortKey, setSortKey] = useState<SortKey>("timestamp");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedEvent, setSelectedEvent] = useState<ThreatEvent | null>(null);
-  const { activeProject, timeRange } = useAuthStore();
+  const { activeProject, timeRange, setAssistantFocus, clearAssistantFocus } = useAuthStore();
 
   useEffect(() => {
     let cancelled = false;
@@ -223,7 +242,10 @@ export default function ThreatTimelinePage() {
         data={tableRows as Array<Record<string, unknown>>}
         onRowClick={(row) => {
           const event = row.event as ThreatEvent | undefined;
-          if (event) setSelectedEvent(event);
+          if (event) {
+            setSelectedEvent(event);
+            setAssistantFocus(toAssistantContext(event));
+          }
         }}
         sortKey={sortKey}
         sortDirection={sortDirection}
@@ -324,7 +346,10 @@ export default function ThreatTimelinePage() {
           title={selectedEvent.title}
           subtitle={`${selectedEvent.severity.toUpperCase()} | ${selectedEvent.type.toUpperCase()} | ${new Date(selectedEvent.timestamp).toLocaleString()}`}
           payload={selectedEvent.payload ?? selectedEvent}
-          onClose={() => setSelectedEvent(null)}
+          onClose={() => {
+            setSelectedEvent(null);
+            clearAssistantFocus();
+          }}
         />
       )}
     </div>

@@ -290,6 +290,12 @@ async def get_upload_progress(
     record = get_upload_status(upload_id)
     if not record:
         raise HTTPException(status_code=404, detail=f"No upload found with id '{upload_id}'")
+    # Ownership check: verify the upload belongs to a project owned by this user
+    proj = get_project(record["project_id"])
+    if not proj:
+        raise HTTPException(status_code=404, detail="Associated project not found")
+    if proj["owner_id"] != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not your upload")
     return record
 
 
@@ -299,6 +305,15 @@ async def get_upload_logs(
     current_user: UserInDB = Depends(get_current_user),
 ) -> dict:
     """Return the accumulated pipeline log lines for an upload."""
+    # Ownership check: look up the upload record to get the project, then verify ownership
+    record = get_upload_status(upload_id)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"No upload found with id '{upload_id}'")
+    proj = get_project(record["project_id"])
+    if not proj:
+        raise HTTPException(status_code=404, detail="Associated project not found")
+    if proj["owner_id"] != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not your upload")
     lines = _upload_logs.get(upload_id, [])
     return {"upload_id": upload_id, "lines": lines}
 
@@ -308,19 +323,41 @@ async def log_time_range(
     project_id: str | None = Query(None, description="Scope to a specific project"),
     current_user: UserInDB = Depends(get_current_user),
 ) -> dict:
+    if project_id:
+        proj = get_project(project_id)
+        if not proj:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if proj["owner_id"] != current_user.id and current_user.role != "admin":
+            raise HTTPException(status_code=403, detail="Not your project")
     return get_log_time_range(project_id=project_id)
 
 
 @router.get("/logs/entries")
 async def get_log_entries(
-    limit:      int        = Query(5000, le=10000, description="Max rows to return"),
-    project_id: str | None = Query(None, description="Scope to a specific project"),
-    upload_id:  str | None = Query(None, description="Return entries for a specific upload"),
-    live_only: bool        = Query(False, description="Only return live agent stream logs"),
-    exclude_windows: bool  = Query(False, description="Exclude Windows event log entries"),
-    _user:      UserInDB   = Depends(get_current_user),
+    limit:           int        = Query(5000, le=10000, description="Max rows to return"),
+    project_id:      str | None = Query(None, description="Scope to a specific project"),
+    upload_id:       str | None = Query(None, description="Return entries for a specific upload"),
+    live_only:       bool       = Query(False, description="Only return live agent stream logs"),
+    exclude_windows: bool       = Query(False, description="Exclude Windows event log entries"),
+    current_user:    UserInDB   = Depends(get_current_user),
 ) -> list:
     """Return normalised log entries for a specific upload."""
+    if project_id:
+        proj = get_project(project_id)
+        if not proj:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if proj["owner_id"] != current_user.id and current_user.role != "admin":
+            raise HTTPException(status_code=403, detail="Not your project")
+    elif upload_id:
+        # Derive project from the upload record and check ownership
+        record = get_upload_status(upload_id)
+        if not record:
+            raise HTTPException(status_code=404, detail="Upload not found")
+        proj = get_project(record["project_id"])
+        if not proj:
+            raise HTTPException(status_code=404, detail="Associated project not found")
+        if proj["owner_id"] != current_user.id and current_user.role != "admin":
+            raise HTTPException(status_code=403, detail="Not your upload")
     return query_logs(
         limit=limit,
         project_id=project_id,
@@ -334,8 +371,23 @@ async def get_log_entries(
 async def get_log_stats(
     project_id: str | None = Query(None, description="Scope to a specific project"),
     upload_id:  str | None = Query(None, description="Scope to a specific upload"),
-    _user:      UserInDB   = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ) -> dict:
     """Return pre-computed log statistics from compact aggregation tables."""
+    if project_id:
+        proj = get_project(project_id)
+        if not proj:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if proj["owner_id"] != current_user.id and current_user.role != "admin":
+            raise HTTPException(status_code=403, detail="Not your project")
+    elif upload_id:
+        record = get_upload_status(upload_id)
+        if not record:
+            raise HTTPException(status_code=404, detail="Upload not found")
+        proj = get_project(record["project_id"])
+        if not proj:
+            raise HTTPException(status_code=404, detail="Associated project not found")
+        if proj["owner_id"] != current_user.id and current_user.role != "admin":
+            raise HTTPException(status_code=403, detail="Not your upload")
     return _get_log_statistics(project_id=project_id, upload_id=upload_id)
 

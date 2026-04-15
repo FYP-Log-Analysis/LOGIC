@@ -32,13 +32,15 @@ def _results_path(project_id: str | None) -> Path | None:
     return None
 
 
-def _assert_project_type(project_id: str, required_type: str) -> dict:
+def _assert_project_type(project_id: str, required_type: str, current_user: UserInDB) -> dict:
     from core.storage.sqlite_store import get_project
 
     project_id = _normalize_project_id(project_id)
     project = get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found.")
+    if project["owner_id"] != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not your project")
     if project.get("project_type") != required_type:
         raise HTTPException(
             status_code=400,
@@ -81,11 +83,11 @@ def _behavioral_defaults() -> dict:
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
 @router.post("/behavioral")
-def run_behavioral(req: BehavioralRequest, _user: UserInDB = Depends(get_current_user)):
+def run_behavioral(req: BehavioralRequest, current_user: UserInDB = Depends(get_current_user)):
     """Run all behavioral detections and persist results."""
     try:
         project_id = _normalize_project_id(req.project_id)
-        _assert_project_type(project_id, "web")
+        _assert_project_type(project_id, "web", current_user)
 
         from core.behavioral.behavioral import run_behavioral_analysis
         result = run_behavioral_analysis(
@@ -119,11 +121,11 @@ def get_behavioral_defaults(_user: UserInDB = Depends(get_current_user)):
 @router.get("/behavioral/results")
 def get_behavioral_results(
     project_id: Optional[str] = Query(None, description="Scope to a specific project"),
-    _user: UserInDB = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ):
     """Return the latest behavioral_results.json (project-scoped if project_id given)."""
     project_id = _normalize_project_id(project_id)
-    _assert_project_type(project_id, "web")
+    _assert_project_type(project_id, "web", current_user)
 
     path = _results_path(project_id)
     if not path or not path.exists():
@@ -150,12 +152,12 @@ def get_behavioral_alerts_route(
     end_ts:     Optional[str] = Query(None, description="Latest timestamp (ISO 8601)"),
     limit:      int           = Query(500,  ge=1, le=5000),
     offset:     int           = Query(0,    ge=0),
-    _user:      UserInDB      = Depends(get_current_user),
+    current_user: UserInDB    = Depends(get_current_user),
 ):
     """Query behavioral alerts from behavioral_results.json files."""
     try:
         if project_id:
-            _assert_project_type(project_id, "web")
+            _assert_project_type(project_id, "web", current_user)
 
         from core.storage.sqlite_store import get_behavioral_alerts as _get
         return {"alerts": _get(
@@ -181,12 +183,12 @@ class WindowsBehavioralRequest(BaseModel):
 @router.post("/windows/behavioral")
 def run_windows_behavioral(
     req: WindowsBehavioralRequest,
-    _user: UserInDB = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ):
     """Run Windows ML (Isolation Forest) anomaly detection."""
     try:
         project_id = _normalize_project_id(req.project_id)
-        _assert_project_type(project_id, "windows")
+        _assert_project_type(project_id, "windows", current_user)
 
         resolved_upload_id = req.upload_id
         if not resolved_upload_id:
@@ -231,13 +233,13 @@ def run_windows_behavioral(
 def get_windows_behavioral_results(
     project_id: Optional[str] = Query(None, description="Scope to a specific project"),
     upload_id: Optional[str] = Query(None, description="Target a specific upload"),
-    _user: UserInDB = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ):
     """Get Windows ML anomaly detection results."""
     from pathlib import Path
     
     project_id = _normalize_project_id(project_id)
-    _assert_project_type(project_id, "windows")
+    _assert_project_type(project_id, "windows", current_user)
     
     projects_dir = _PROJECT_ROOT / "data" / "projects"
     
@@ -294,13 +296,13 @@ def get_windows_behavioral_window_events(
     start_ts: Optional[str] = Query(None, description="Backward-compatible alias for window_start"),
     window_minutes: int = Query(5, ge=1, le=180, description="Window size in minutes"),
     limit: int = Query(200, ge=1, le=2000, description="Max matching events returned"),
-    _user: UserInDB = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ):
     """Return normalized Windows events for a selected behavioral analysis time window."""
     import ijson
 
     project_id = _normalize_project_id(project_id)
-    _assert_project_type(project_id, "windows")
+    _assert_project_type(project_id, "windows", current_user)
 
     selected_start_raw = window_start or start_ts
     selected_start = _parse_iso_utc(selected_start_raw)
@@ -383,13 +385,13 @@ def get_windows_behavioral_window_findings(
     sigma_limit: int = Query(200, ge=1, le=5000, description="Max overlapping sigma matches returned"),
     include_sigma: bool = Query(True, description="Include Sigma overlaps for the selected window"),
     include_sigma_entry: bool = Query(False, description="Include raw Sigma event payload entry"),
-    _user: UserInDB = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ):
     """Return one selected behavioral window with raw events and overlapping Sigma findings."""
     import ijson
 
     project_id = _normalize_project_id(project_id)
-    _assert_project_type(project_id, "windows")
+    _assert_project_type(project_id, "windows", current_user)
 
     selected_start_raw = window_start or start_ts
     selected_start = _parse_iso_utc(selected_start_raw)

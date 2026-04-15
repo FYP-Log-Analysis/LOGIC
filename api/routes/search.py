@@ -17,7 +17,8 @@ from api.deps import UserInDB, get_current_user
 router = APIRouter(prefix="/search", tags=["Search"])
 
 
-def _assert_project_type(project_id: str | None, required_type: str) -> None:
+def _assert_project_access(project_id: str | None, required_type: str, current_user: UserInDB) -> None:
+    """Validate project exists, belongs to current_user (or user is admin), and matches required_type."""
     if not project_id:
         return
     project_id = _normalize_project_id(project_id)
@@ -26,6 +27,8 @@ def _assert_project_type(project_id: str | None, required_type: str) -> None:
     project = get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found.")
+    if project["owner_id"] != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not your project")
     if project.get("project_type") != required_type:
         raise HTTPException(
             status_code=400,
@@ -47,9 +50,9 @@ def get_detections(
     end_ts:     str | None = Query(None, description="Latest timestamp (ISO 8601)"),
     limit:      int        = Query(100, le=50000),
     offset:     int        = Query(0),
-    _user:      UserInDB   = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ) -> dict[str, Any]:
-    _assert_project_type(project_id, "web")
+    _assert_project_access(project_id, "web", current_user)
     rows, total = query_detections(
         severity=severity, rule_id=rule_id, client_ip=client_ip,
         project_id=project_id, upload_id=upload_id,
@@ -62,9 +65,9 @@ def get_detections(
 @router.get("/stats")
 def get_summary_stats(
     project_id: str | None = Query(None, description="Scope to a specific project"),
-    _user:      UserInDB   = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ) -> dict[str, Any]:
-    _assert_project_type(project_id, "web")
+    _assert_project_access(project_id, "web", current_user)
     return get_stats(project_id=project_id)
 
 
@@ -72,9 +75,9 @@ def get_summary_stats(
 def get_ip_summary_endpoint(
     client_ip:  str,
     project_id: str | None = Query(None, description="Scope to a specific project"),
-    _user:      UserInDB   = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ) -> dict[str, Any]:
-    _assert_project_type(project_id, "web")
+    _assert_project_access(project_id, "web", current_user)
     return get_ip_summary(client_ip, project_id=project_id)
 
 
@@ -84,9 +87,10 @@ def get_overview(
     upload_id:  str | None = Query(None, description="Scope to a specific upload"),
     start_ts:   str | None = Query(None, description="Earliest timestamp (ISO 8601)"),
     end_ts:     str | None = Query(None, description="Latest timestamp (ISO 8601)"),
-    _user:      UserInDB   = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Return all dashboard overview data, computed server-side."""
+    _assert_project_access(project_id, "web", current_user)
     return get_overview_stats(
         project_id=project_id, upload_id=upload_id,
         start_ts=start_ts, end_ts=end_ts,
@@ -99,10 +103,10 @@ def get_detection_aggs(
     upload_id:  str | None = Query(None, description="Scope to a specific upload"),
     start_ts:   str | None = Query(None, description="Earliest timestamp (ISO 8601)"),
     end_ts:     str | None = Query(None, description="Latest timestamp (ISO 8601)"),
-    _user:      UserInDB   = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Return pre-computed detection aggregations for the Detections page."""
-    _assert_project_type(project_id, "web")
+    _assert_project_access(project_id, "web", current_user)
     return get_detection_aggregations(
         project_id=project_id, upload_id=upload_id,
         start_ts=start_ts, end_ts=end_ts,

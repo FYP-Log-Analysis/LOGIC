@@ -28,9 +28,9 @@ def _latest_upload_id(project_id: str) -> str | None:
     return None
 
 
-def _project_paths(project_id: str | None, upload_id: str | None = None, required_type: str | None = None) -> tuple[Path, Path, str]:
+def _project_paths(project_id: str | None, upload_id: str | None = None, required_type: str | None = None, current_user: "UserInDB | None" = None) -> tuple[Path, Path, str]:
     """Return (normalised_path, results_file, resolved_upload_id) scoped to a specific upload.
-    Validates project type if required_type is specified."""
+    Validates project ownership and type if required_type is specified."""
     if not project_id:
         raise HTTPException(
             status_code=400,
@@ -39,17 +39,18 @@ def _project_paths(project_id: str | None, upload_id: str | None = None, require
 
     project_id = _normalize_project_id(project_id)
 
-    # Validate project type if specified
-    if required_type:
-        from core.storage.sqlite_store import get_project
-        proj = get_project(project_id)
-        if not proj:
-            raise HTTPException(status_code=404, detail="Project not found.")
-        if proj.get("project_type") != required_type:
-            raise HTTPException(
-                status_code=400,
-                detail=f"This endpoint is for {required_type.upper()} projects. The project '{project_id}' is a {proj.get('project_type', 'unknown').upper()} project.",
-            )
+    # Always validate ownership and type when a project_id is supplied
+    from core.storage.sqlite_store import get_project
+    proj = get_project(project_id)
+    if not proj:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    if current_user and proj["owner_id"] != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not your project")
+    if required_type and proj.get("project_type") != required_type:
+        raise HTTPException(
+            status_code=400,
+            detail=f"This endpoint is for {required_type.upper()} projects. The project '{project_id}' is a {proj.get('project_type', 'unknown').upper()} project.",
+        )
 
     resolved_upload = upload_id or _latest_upload_id(project_id)
     if not resolved_upload:
@@ -117,9 +118,9 @@ async def get_threat_insights(
     upload_id:  Optional[str] = None,
     start_ts: Optional[str] = Query(None, description="Start time (ISO 8601)"),
     end_ts: Optional[str] = Query(None, description="End time (ISO 8601)"),
-    _user: UserInDB = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ) -> Dict:
-    _, results_file, _ = _project_paths(project_id, upload_id, required_type="web")
+    _, results_file, _ = _project_paths(project_id, upload_id, required_type="web", current_user=current_user)
     detection_data = _load_results(results_file)
     
     # Apply time range filter if provided
@@ -141,9 +142,9 @@ async def analyse_rule_match(
     rule_id:    str,
     project_id: Optional[str] = None,
     upload_id:  Optional[str] = None,
-    _user:      UserInDB = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ) -> Dict:
-    _, results_file, _ = _project_paths(project_id, upload_id, required_type="web")
+    _, results_file, _ = _project_paths(project_id, upload_id, required_type="web", current_user=current_user)
     detection_data = _load_results(results_file)
     matches = detection_data.get("matches", [])
     match = next((m for m in matches if m.get("rule_id") == rule_id), None)
@@ -159,11 +160,11 @@ async def analyse_rule_match(
 async def insights_status(
     project_id: Optional[str] = None,
     upload_id:  Optional[str] = None,
-    _user: UserInDB = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ) -> Dict:
     groq_key_set = bool(os.getenv("GROQ_API_KEY"))
     try:
-        _, results_file, _ = _project_paths(project_id, upload_id, required_type="web")
+        _, results_file, _ = _project_paths(project_id, upload_id, required_type="web", current_user=current_user)
     except HTTPException as exc:
         return {"status": "no_data", "message": exc.detail, "groq_key_set": groq_key_set}
     if results_file.exists():
@@ -325,13 +326,13 @@ def _run_analysis_task(
 async def run_analysis(
     request:          AnalysisRequest,
     background_tasks: BackgroundTasks,
-    _user: UserInDB = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ) -> Dict:
     """
     Kick off a background CRS analysis task (WEB LOGS ONLY).
     Returns 202 with run_id for polling.
     """
-    normalised_path, _, resolved_upload_id = _project_paths(request.project_id, request.upload_id, required_type="web")
+    normalised_path, _, resolved_upload_id = _project_paths(request.project_id, request.upload_id, required_type="web", current_user=current_user)
     if not normalised_path.exists():
         raise HTTPException(
             status_code=400,
@@ -372,10 +373,12 @@ async def run_analysis(
 async def get_latest_analysis_run(
     project_id: Optional[str] = None,
     upload_id:  Optional[str] = None,
-    _user: UserInDB = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ) -> Dict:
     """Return the most recent persisted analysis run for a project/upload."""
-    # Try resolved upload first, then fall back to latest completed upload
+    # Enforce ownership before reading persisted run data
+    if project_id:
+        _project_paths(project_id, upload_id, current_user=current_user)
     resolved = upload_id or _latest_upload_id(project_id) if project_id else None
     record = _load_persisted_run(project_id, resolved)
     if not record:

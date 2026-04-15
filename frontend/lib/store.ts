@@ -1,6 +1,16 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { ProjectType } from "@/lib/client";
+import type { StateStorage } from "zustand/middleware";
+
+const noopStorage: StateStorage = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+};
+
+const getPersistStorage = (): StateStorage =>
+  typeof window !== "undefined" ? window.localStorage : noopStorage;
 
 export interface User {
   username: string;
@@ -96,7 +106,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "logic-dashboard-store",
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(getPersistStorage),
       partialize: (state) => ({
         activeProject: state.activeProject,
         timeRange: state.timeRange,

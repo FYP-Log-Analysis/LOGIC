@@ -35,6 +35,11 @@ ok()   { echo -e "${GREEN}[ok]${NC}   $*"; }
 warn() { echo -e "${YELLOW}[!!]${NC}   $*"; }
 die()  { echo -e "${RED}[FATAL]${NC} $*"; exit 1; }
 
+port_in_use() {
+    local port="$1"
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+}
+
 # ── 1. Load .env ──────────────────────────────────────────────────────────────
 if [ -f ".env" ]; then
     log "Loading .env …"
@@ -86,7 +91,13 @@ else
     HOST_IP="${HOST_IP:-localhost}"
 fi
 
-# ── 6. Start FastAPI (production mode — 2 workers, no hot-reload) ─────────────
+# ── 6. Preflight port checks ─────────────────────────────────────────────────
+port_in_use 4000 && die "Port 4000 is already in use. Stop the existing process before running production."
+if [ -d "frontend" ]; then
+    port_in_use 3000 && die "Port 3000 is already in use. Stop the existing process before running production."
+fi
+
+# ── 7. Start FastAPI (production mode — 2 workers, no hot-reload) ─────────────
 log "Starting FastAPI on :4000 (2 workers) …"
 uvicorn api.main:app \
     --host 0.0.0.0 \
@@ -97,20 +108,28 @@ uvicorn api.main:app \
 API_PID=$!
 
 sleep 2
+kill -0 "$API_PID" 2>/dev/null || die "FastAPI failed to start. Check logs and try again."
 
-# ── 7. Build and start Next.js frontend (production) ────────────────────────
+# ── 8. Build and start Next.js frontend (production) ────────────────────────
 if [ -d "frontend" ]; then
     log "Building Next.js frontend …"
-    (cd frontend && npm install --silent && npm run build)
-    log "Starting Next.js on :3000 …"
-    (cd frontend && npm run start -- --port 3000) &
+    (cd frontend && env -u NODE_OPTIONS npm install --silent && env -u NODE_OPTIONS npm run build)
+    log "Starting Next.js standalone server on :3000 …"
+    if [ -f "frontend/.next/standalone/server.js" ]; then
+        (cd frontend && env -u NODE_OPTIONS HOSTNAME=0.0.0.0 PORT=3000 node .next/standalone/server.js) &
+    else
+        warn "Standalone output missing; falling back to next start"
+        (cd frontend && env -u NODE_OPTIONS npm run start -- --port 3000) &
+    fi
     DASH_PID=$!
+    sleep 2
+    kill -0 "$DASH_PID" 2>/dev/null || die "Next.js failed to start. Check frontend logs and try again."
 else
     warn "frontend/ directory not found — skipping Next.js"
     DASH_PID=""
 fi
 
-# ── 8. Print summary ──────────────────────────────────────────────────────────
+# ── 9. Print summary ──────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${GREEN}  LOGIC Web Agent — PRODUCTION${NC}"
@@ -126,7 +145,7 @@ echo -e "  Press ${RED}Ctrl+C${NC} or send SIGTERM to stop both services"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-# ── 9. Wait and clean up ──────────────────────────────────────────────────────
+# ── 10. Wait and clean up ─────────────────────────────────────────────────────
 cleanup() {
     echo ""
     log "Received shutdown signal — stopping services …"

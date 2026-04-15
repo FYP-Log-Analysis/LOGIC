@@ -9,6 +9,12 @@ The updated LOGIC testing strategy validates both implementation correctness and
 
 The test environment uses local development execution with FastAPI backend, Next.js frontend, SQLite storage, project-scoped runtime data, and optional containerized deployment.
 
+Practical distinction used in this report:
+
+1. Unit testing: validates one function, class, or route contract in isolation using mocks/fixtures and controlled inputs.
+2. System testing: validates a complete business workflow across multiple real components (UI, API, async processing, storage, and output artifacts).
+3. Unit test failures usually point to a local implementation defect; system test failures usually point to integration, orchestration, data-flow, or environment defects.
+
 Main coverage areas in this plan:
 
 1. Authentication and authorization flows.
@@ -53,26 +59,29 @@ Unit test exit criteria:
 ## 4.1.2 SYSTEM TESTING, TEST PLAN
 
 System testing validates complete user-visible and operator-visible workflows from login to investigation output, including runtime resilience.
+Unlike unit tests, system tests run integrated service paths without module-level mocking and verify cross-component behavior.
 
 Planned system test objectives:
 
-1. Validate role-aware user journeys in frontend and API.
-2. Validate asynchronous upload and analysis for web and Windows projects.
-3. Validate search, dashboard, timeline, and export workflows.
-4. Validate agent pipeline, persistence, and service recovery behavior.
+1. Validate role-aware user journeys across frontend navigation, API authorization, and persisted session state.
+2. Validate asynchronous ingest-to-analysis workflows for web and Windows telemetry across upload, queue/status polling, normalization, and persistence.
+3. Validate analyst investigation workflows (overview, search, detail inspection, timeline, and export) using generated project data.
+4. Validate operational reliability behaviors including invalid-input containment, restart recovery, and agent-assisted ingestion.
 
 System test entry criteria:
 
 1. API and frontend services are running.
 2. Test users and at least one web and one Windows project are available.
 3. Sample uploads, rulesets, and agent credentials are accessible.
-4. Optional docker compose environment is available for deployment smoke testing.
+4. Background processing paths are enabled (task polling/worker behavior reachable in current runtime mode).
+5. Optional docker compose environment is available for deployment smoke testing.
 
 System test exit criteria:
 
-1. Minimum 14 planned system tests are executed.
+1. Minimum 12 planned system tests are executed.
 2. End-to-end critical workflows pass without blocking defect.
-3. No unresolved high-severity issue remains in authentication, analysis, or data isolation paths.
+3. No unresolved high-severity issue remains in authentication, analysis, data isolation, or recovery paths.
+4. Each executed workflow has reproducible evidence (API responses, persisted output checks, and/or UI verification artifacts).
 
 ## 4.2 UNIT TESTING
 
@@ -104,31 +113,31 @@ Unit testing outcome summary:
 
 ## 4.3 SYSTEM TESTING
 
-The following updated 14 system test cases validate integrated workflows across backend, frontend, storage, agent tooling, and deployment.
+The following updated 12 system test cases validate integrated workflows across backend, frontend, storage, agent tooling, and deployment.
+Each case is defined as a full workflow traversal, not as a single-module behavior check.
 
-| Test ID | Workflow Area | Test Scenario | Expected Result | Status |
-|---|---|---|---|---|
-| ST-01 | Service Availability | Start API and frontend, then validate root and docs endpoints | Services are reachable and operational health is confirmed | Planned |
-| ST-02 | Authentication Flow | Login from UI and access protected dashboard route | JWT session established and protected pages load correctly | Planned |
-| ST-03 | Role-Based Access | Analyst account invokes admin-only endpoint | Access is denied with correct authorization response | Planned |
-| ST-04 | Project Lifecycle | Create, list, and open project detail page | Project appears immediately with consistent metadata across UI and API | Planned |
-| ST-05 | Web Ingestion Pipeline | Upload Apache/Nginx logs and poll processing status | Upload completes and normalized events become queryable | Planned |
-| ST-06 | Windows Ingestion Pipeline | Upload EVTX/XML telemetry and poll processing status | Windows records ingest, normalize, and persist without blocking errors | Planned |
-| ST-07 | Web Detection Workflow | Run web analysis and open detections view | CRS detections, severity buckets, and timeline are populated | Planned |
-| ST-08 | Windows Detection Workflow | Run Sigma analysis and inspect correlated output | Sigma matches and correlated chains are returned in expected schema | Planned |
-| ST-09 | Behavioral and Search UX | Apply filters and time ranges in overview/search pages | Counts, tables, and detail panels stay consistent with selected filters | Planned |
-| ST-10 | Export and Reporting | Trigger CSV/report export for investigation artifacts | Export files are generated, downloadable, and non-empty | Planned |
-| ST-11 | LLM-Assisted Analyst Workflow | Submit question via analysis chat interface | Chat/threat insight response returns without API failure and includes context | Planned |
-| ST-12 | Agent Tooling | Download agent artifact and submit ingest payload with API key | Payload is accepted and appears in project ingestion/analysis views | Planned |
-| ST-13 | Data Isolation and Multi-Project Safety | Access data across two user projects with different identities | Cross-project data leakage does not occur in API or UI responses | Planned |
-| ST-14 | Resilience and Recovery | Send invalid payload, then execute valid analysis run after restart | Invalid request is contained; subsequent valid workflow succeeds | Planned |
+| Test ID | End-to-End Workflow | Integration Boundary Traversed | Test Scenario | Expected Result | Status |
+|---|---|---|---|---|---|
+| ST-01 | Platform startup and health | Frontend runtime -> API service -> route registry/docs | Start API and frontend, then validate root and docs endpoints | Services are reachable and operational health is confirmed | Planned |
+| ST-02 | Authenticated analyst login | Login UI -> auth route -> token/session -> protected dashboard API | Login from UI and access protected dashboard route | Session is established and protected pages load with authorized data | Planned |
+| ST-03 | Authorization enforcement | Analyst token -> admin route guard -> HTTP error handling | Analyst account invokes admin-only endpoint | Access is denied with correct authorization response and no privilege escalation | Planned |
+| ST-04 | Multi-project isolation workflow | User/project identity context -> API queries -> dashboard rendering | Create two projects under different user identities and open project detail pages | Projects render correctly and cross-project data leakage does not occur | Planned |
+| ST-05 | Web telemetry ingest to query | Upload UI/API -> ingest route -> normalization -> storage -> search endpoint | Upload Apache/Nginx logs and poll processing status until completion | Upload completes and normalized web events are queryable from investigation views | Planned |
+| ST-06 | Windows telemetry ingest to query | Upload UI/API -> EVTX/XML parsing -> normalization -> storage -> analysis route | Upload EVTX/XML telemetry and poll processing status until completion | Windows records ingest and persist without blocking errors and are available for analysis | Planned |
+| ST-07 | Web detection investigation | Analysis trigger -> CRS engine -> persisted detections -> dashboard/timeline widgets | Run web analysis and open detections view | Detections, severity buckets, and timeline widgets are populated consistently | Planned |
+| ST-08 | Windows detection and chaining | Analysis trigger -> Sigma matching -> correlation engine -> detail panel schema | Run Sigma analysis and inspect correlated output | Sigma matches and correlated chains are returned with expected fields and severities | Planned |
+| ST-09 | Analyst filtering workflow | UI filters -> search/overview routes -> pagination/state synchronization | Apply filters and time ranges in overview/search pages | Counts, tables, and detail panels remain consistent across navigation and pagination | Planned |
+| ST-10 | Export artifact workflow | Investigation selections -> export route -> file generation -> download path | Trigger CSV/report export for investigation artifacts | Export files are generated, downloadable, and non-empty with expected columns | Planned |
+| ST-11 | LLM-assisted triage workflow | Chat UI -> analysis route -> LLM service wrapper -> response rendering | Submit analyst question via analysis chat interface | Insight response returns without API failure and includes project-relevant context | Planned |
+| ST-12 | Agent ingestion with recovery | Agent download route -> receiver ingest -> persistence -> restart -> re-ingest | Download agent artifact, submit ingest payload with API key, then re-run after service restart | Failed/invalid ingest is contained and subsequent valid ingest succeeds after recovery | Planned |
 
 System testing outcome summary:
 
-1. Total planned system test cases: 14
-2. Coverage target: authentication, pipelines, analytics, exports, agent tooling, and resilience
+1. Total planned system test cases: 12
+2. Coverage target: authentication, authorization, ingestion pipelines, analytics, exports, agent tooling, isolation, and resilience
 3. Execution status: planned for integrated validation cycle
 4. Acceptance target: no high-severity blocker in end-to-end workflows
+5. Evidence target: each case includes at least one integration proof point (UI state, API contract, and stored-result verification)
 
 ## 4.4 CRITICAL ANALYSIS
 
@@ -157,7 +166,7 @@ Recommended improvements:
 
 Conclusion:
 
-The updated Chapter 4 test plan defines a minimum validation baseline of 14 unit tests and 14 system tests, covering all primary project tools and workflows. This provides a dependable foundation for controlled execution, regression safety, and future scaling and security hardening.
+The updated Chapter 4 test plan defines a minimum validation baseline of 14 unit tests and 12 system tests, covering all primary project tools and workflows. This provides a dependable foundation for controlled execution, regression safety, and future scaling and security hardening.
 
 ## 4.5 HOW EVENTS ARE CORRELATED IN LOGIC PROJECTS (WINDOWS AND WEB SERVER LOGS)
 

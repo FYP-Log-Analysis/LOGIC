@@ -339,7 +339,9 @@ export interface LiveAgentMonitorEvent {
 
 export interface LiveAgentMonitorData {
   project_id: string;
-  status: "active" | "idle";
+  status: "active" | "idle" | "stopped";
+  monitoring_state?: "running" | "stopped";
+  is_accepting_logs?: boolean;
   has_traffic?: boolean;
   uptime_seconds: number;
   last_batch_at: number | null;
@@ -350,6 +352,9 @@ export interface LiveAgentMonitorData {
   last_upload_id: string | null;
   last_host?: string | null;
   endpoint_usage?: Record<string, number>;
+  restart_count?: number;
+  last_control_action?: "stop" | "resume" | "restart" | null;
+  control_updated_at?: number | null;
   validation_error_count?: number;
   processing_error_count?: number;
   last_validation_error?: LiveAgentMonitorEvent | null;
@@ -360,6 +365,21 @@ export interface LiveAgentMonitorData {
 
 export async function getLiveAgentMonitor(projectId: string) {
   return apiGet<LiveAgentMonitorData>(`api/receiver/monitor?project_id=${encodeURIComponent(projectId)}`);
+}
+
+export type MonitorControlAction = "stop" | "resume" | "restart";
+
+export interface MonitorControlResponse {
+  project_id: string;
+  action: MonitorControlAction;
+  message: string;
+  monitor: LiveAgentMonitorData;
+}
+
+export async function controlLiveAgentMonitor(projectId: string, action: MonitorControlAction) {
+  return apiPost<MonitorControlResponse>(`api/receiver/monitor/control?project_id=${encodeURIComponent(projectId)}`, {
+    action,
+  });
 }
 
 export async function sendAgentIngestTest(projectId: string, apiKey: string, mode: ProjectType = "web") {

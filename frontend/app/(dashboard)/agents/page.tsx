@@ -20,6 +20,7 @@ import {
   SectionHeader,
   Spinner,
 } from "@/components/ui-primitives";
+import AgentMonitorControls from "@/components/agent-monitor-controls";
 
 type ProjectOption = {
   id: string;
@@ -191,6 +192,12 @@ export default function AgentsPage() {
       <SectionHeader
         title={pageTitle}
         subtitle={pageSubtitle}
+      />
+
+      <AgentMonitorControls
+        projectId={selectedProjectId || null}
+        projectType={currentMode}
+        onMonitorChange={setMonitor}
       />
 
       {error && <AlertBanner type="error" message={error} />}

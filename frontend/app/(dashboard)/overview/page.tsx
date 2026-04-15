@@ -19,6 +19,7 @@ import { SectionHeader, MetricCard, Divider, Spinner, Btn } from "@/components/u
 import BarChart from "@/components/charts/bar-chart";
 import PieChart from "@/components/charts/pie-chart";
 import { EventDetailModal } from "@/components/event-detail-modal";
+import AgentMonitorControls from "@/components/agent-monitor-controls";
 
 function heatColor(count: number, maxCount: number): string {
   if (maxCount === 0 || count === 0) return "#111";
@@ -255,16 +256,21 @@ export default function OverviewPage() {
     }
 
     try {
-      const logsPromise = isWindowsProject
-        ? getRawLogs({ projectId: activeProject.id, limit: 500, liveOnly: true })
-        : getRawLogs({ projectId: activeProject.id, limit: 500, liveOnly: true, excludeWindows: true });
-
-      const [monitorData, logs] = await Promise.all([
-        getLiveAgentMonitor(activeProject.id),
-        logsPromise,
-      ]);
-
+      const monitorData = await getLiveAgentMonitor(activeProject.id);
       setMonitor(monitorData);
+
+      const monitorState = monitorData.monitoring_state ?? (monitorData.status === "stopped" ? "stopped" : "running");
+      const shouldFetchLogs = !silent || monitorState !== "stopped";
+
+      if (!shouldFetchLogs) {
+        setLiveError(null);
+        return;
+      }
+
+      const logs = isWindowsProject
+        ? await getRawLogs({ projectId: activeProject.id, limit: 500, liveOnly: true })
+        : await getRawLogs({ projectId: activeProject.id, limit: 500, liveOnly: true, excludeWindows: true });
+
       if (isWindowsProject) {
         const windowsOnly = logs.filter((entry) => {
           const serverType = String(entry.server_type ?? "").toLowerCase();
@@ -908,6 +914,11 @@ export default function OverviewPage() {
     return (
       <div>
         <SectionHeader title="Overview" subtitle="Operational log baseline and request behavior snapshot" />
+        <AgentMonitorControls
+          projectId={activeProject.id}
+          projectType={isWindowsProject ? "windows" : "web"}
+          onMonitorChange={setMonitor}
+        />
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
           <Btn onClick={refreshOverview} style={{ marginLeft: "auto" }}>Refresh</Btn>
         </div>
@@ -957,6 +968,11 @@ export default function OverviewPage() {
   return (
     <div className="page-shell">
       <SectionHeader title="Overview" subtitle="Operational log baseline and request behavior snapshot" />
+      <AgentMonitorControls
+        projectId={activeProject.id}
+        projectType={isWindowsProject ? "windows" : "web"}
+        onMonitorChange={setMonitor}
+      />
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 28 }}>
         <div style={{ color: "#666", fontSize: 12, letterSpacing: 0.6 }}>

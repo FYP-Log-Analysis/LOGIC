@@ -24,6 +24,7 @@ import {
   Spinner,
 } from "@/components/ui-primitives";
 import UploadStepper from "@/components/upload-stepper";
+import AgentMonitorControls from "@/components/agent-monitor-controls";
 
 interface Project {
   id: string;
@@ -662,6 +663,12 @@ export default function ProjectsPage() {
               </div>
 
               <div style={{ background: "#0a0d10", border: "1px solid #1a222a", borderRadius: 6, padding: 12 }}>
+                <AgentMonitorControls
+                  projectId={agentSetupProjectId}
+                  projectType={agentSetupProject?.project_type === "windows" ? "windows" : "web"}
+                  onMonitorChange={setLiveMonitor}
+                />
+
                 <div style={{ fontSize: 11, color: "#7fa8bf", marginBottom: 8, letterSpacing: 1, textTransform: "uppercase" }}>Incoming Live Logs</div>
                 {liveMonitorLoading && !liveMonitor ? (
                   <div style={{ padding: 12 }}><Spinner size={16} /></div>

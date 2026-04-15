@@ -7,9 +7,10 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
+from pydantic import BaseModel
 
 from api.deps import UserInDB, get_current_user, get_optional_current_user
 from api.routes.projects import _normalize_project_id
@@ -38,6 +39,10 @@ _MAX_RECORDS_PER_REQUEST = 5_000
 _REQUIRED_AGENT_FIELDS = ("host", "file", "log", "date", "agent_version")
 
 
+class MonitorControlRequest(BaseModel):
+    action: Literal["stop", "resume", "restart"]
+
+
 def _project_upload_dir(project_id: str, upload_id: str) -> Path:
     return PROJECTS_DIR / project_id / "uploads" / upload_id
 
@@ -57,6 +62,10 @@ def _get_monitor_state(project_id: str) -> dict[str, Any]:
                 "endpoint_usage": {},
                 "validation_events": [],
                 "processing_events": [],
+                "monitoring_state": "running",
+                "restart_count": 0,
+                "last_control_action": None,
+                "control_updated_at": None,
             }
             _PROJECT_MONITOR_STATE[project_id] = state
         return state
@@ -109,9 +118,13 @@ def get_live_monitor_snapshot(project_id: str) -> dict[str, Any]:
     with _MONITOR_GUARD:
         started_at = state["started_at"]
         last_batch_at = state["last_batch_at"]
+        monitoring_state = str(state.get("monitoring_state", "running"))
         has_traffic = bool(last_batch_at)
         uptime_seconds = int(now - started_at) if started_at else 0
-        status = "active" if last_batch_at and (now - last_batch_at) <= 30 else "idle"
+        if monitoring_state == "stopped":
+            status = "stopped"
+        else:
+            status = "active" if last_batch_at and (now - last_batch_at) <= 30 else "idle"
         seconds_since_last_batch = int(now - last_batch_at) if last_batch_at else None
         validation_errors = list(state["validation_events"][-20:])
         processing_errors = list(state["processing_events"][-20:])
@@ -119,6 +132,8 @@ def get_live_monitor_snapshot(project_id: str) -> dict[str, Any]:
         return {
             "project_id": project_id,
             "status": status,
+            "monitoring_state": monitoring_state,
+            "is_accepting_logs": monitoring_state == "running",
             "has_traffic": has_traffic,
             "uptime_seconds": uptime_seconds,
             "last_batch_at": last_batch_at,
@@ -128,6 +143,9 @@ def get_live_monitor_snapshot(project_id: str) -> dict[str, Any]:
             "total_size_bytes": int(state["total_bytes"]),
             "last_upload_id": state["last_upload_id"],
             "last_host": state.get("last_host"),
+            "restart_count": int(state.get("restart_count", 0)),
+            "last_control_action": state.get("last_control_action"),
+            "control_updated_at": state.get("control_updated_at"),
             "endpoint_usage": dict(state.get("endpoint_usage", {})),
             "validation_errors": validation_errors,
             "processing_errors": processing_errors,
@@ -136,6 +154,42 @@ def get_live_monitor_snapshot(project_id: str) -> dict[str, Any]:
             "last_validation_error": validation_errors[-1] if validation_errors else None,
             "last_processing_error": processing_errors[-1] if processing_errors else None,
         }
+
+
+def _apply_monitor_control(project_id: str, action: Literal["stop", "resume", "restart"], actor: str) -> dict[str, Any]:
+    state = _get_monitor_state(project_id)
+    now = time.time()
+    with _MONITOR_GUARD:
+        if action == "stop":
+            state["monitoring_state"] = "stopped"
+            state["last_control_action"] = "stop"
+            state["control_updated_at"] = now
+            _push_monitor_event(state["processing_events"], f"Monitoring stopped by {actor}")
+        elif action == "resume":
+            state["monitoring_state"] = "running"
+            state["last_control_action"] = "resume"
+            state["control_updated_at"] = now
+            if state["started_at"] is None:
+                state["started_at"] = now
+            _push_monitor_event(state["processing_events"], f"Monitoring resumed by {actor}")
+        elif action == "restart":
+            state["started_at"] = now
+            state["last_batch_at"] = None
+            state["total_records"] = 0
+            state["total_bytes"] = 0
+            state["batch_count"] = 0
+            state["last_upload_id"] = None
+            state["last_host"] = None
+            state["endpoint_usage"] = {}
+            state["validation_events"] = []
+            state["processing_events"] = []
+            state["monitoring_state"] = "running"
+            state["restart_count"] = int(state.get("restart_count", 0)) + 1
+            state["last_control_action"] = "restart"
+            state["control_updated_at"] = now
+            _push_monitor_event(state["processing_events"], f"Monitoring restarted by {actor}")
+
+    return get_live_monitor_snapshot(project_id)
 
 
 def _get_pipeline_state(project_id: str) -> dict[str, Any]:
@@ -443,6 +497,16 @@ async def _receive_live_ingest(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    state = _get_monitor_state(project_id)
+    with _MONITOR_GUARD:
+        monitoring_state = str(state.get("monitoring_state", "running"))
+    if monitoring_state != "running":
+        _record_validation_error(project_id, f"Ingest rejected because monitor state is '{monitoring_state}'")
+        raise HTTPException(
+            status_code=409,
+            detail=f"Agent monitor is currently {monitoring_state}. Resume or restart monitoring to accept logs.",
+        )
+
     payload = await request.body()
     if not payload:
         _record_validation_error(project_id, "Empty request body")
@@ -508,3 +572,27 @@ async def get_project_live_monitor(
 ) -> dict:
     _assert_project_access(project_id, current_user)
     return get_live_monitor_snapshot(project_id)
+
+
+@router.post("/monitor/control")
+async def control_project_live_monitor(
+    req: MonitorControlRequest,
+    project_id: str = Query(..., description="Project to control live agent monitoring"),
+    current_user: UserInDB = Depends(get_current_user),
+) -> dict:
+    _assert_project_access(project_id, current_user)
+    action = req.action
+    monitor = _apply_monitor_control(project_id, action, actor=current_user.username)
+
+    message_map = {
+        "stop": "Monitoring stopped. New agent batches will be rejected until resumed.",
+        "resume": "Monitoring resumed. Agent batches will be accepted again.",
+        "restart": "Monitoring restarted. Runtime counters were reset.",
+    }
+
+    return {
+        "project_id": project_id,
+        "action": action,
+        "message": message_map[action],
+        "monitor": monitor,
+    }

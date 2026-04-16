@@ -163,14 +163,15 @@ export default function ThreatActorPage() {
     setIpProfile(null);
     setLoadingProfile(true);
     try {
-      const profile = await getIpSummary(ip);
+      const profile = await getIpSummary(ip, { projectId: activeProject?.id });
       setIpProfile(profile as IpProfile);
     } catch {
       // Profile fetch failed (no logs stored); leave null
     } finally {
       setLoadingProfile(false);
     }
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject?.id]);
 
   // ── Derived data for selected IP ──────────────────────────────────────────
 
@@ -427,9 +428,9 @@ export default function ThreatActorPage() {
               </div>
               {loadingProfile ? <Spinner /> : (
                 <div style={{ fontSize: 13, lineHeight: 2 }}>
-                  <div><span style={{ color: "#666" }}>First seen: </span><span style={{ color: "#c0c0c0" }}>{ipProfile?.first_seen ?? "N/A"}</span></div>
-                  <div><span style={{ color: "#666" }}>Last seen: </span><span style={{ color: "#c0c0c0" }}>{ipProfile?.last_seen ?? "N/A"}</span></div>
-                  <div><span style={{ color: "#666" }}>Total requests: </span><span style={{ color: "#c0c0c0" }}>{ipProfile?.request_count ?? "N/A"}</span></div>
+                  <div><span style={{ color: "#666" }}>First seen: </span><span style={{ color: "#c0c0c0" }}>{ipProfile?.first_seen ? new Date(ipProfile.first_seen).toLocaleString() : (ipMatches.length > 0 ? new Date(Math.min(...ipMatches.filter(m => m.timestamp).map(m => new Date(m.timestamp!).getTime()))).toLocaleString() : "N/A")}</span></div>
+                  <div><span style={{ color: "#666" }}>Last seen: </span><span style={{ color: "#c0c0c0" }}>{ipProfile?.last_seen ? new Date(ipProfile.last_seen).toLocaleString() : (ipMatches.length > 0 ? new Date(Math.max(...ipMatches.filter(m => m.timestamp).map(m => new Date(m.timestamp!).getTime()))).toLocaleString() : "N/A")}</span></div>
+                  <div><span style={{ color: "#666" }}>Total requests: </span><span style={{ color: "#c0c0c0" }}>{ipProfile?.request_count ?? ipMatches.length}</span></div>
                 </div>
               )}
             </div>

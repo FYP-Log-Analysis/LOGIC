@@ -217,7 +217,8 @@ export async function getBehavioralResults(opts?: Pick<ScopeOpts, "projectId">) 
   }>(buildQuery("api/analysis/behavioral/results", opts));
 }
 
-export async function getIpSummary(clientIp: string) {
+export async function getIpSummary(clientIp: string, opts?: Pick<ScopeOpts, "projectId">) {
+  const base = `api/search/ip-summary/${encodeURIComponent(clientIp)}`;
   return apiGet<{
     client_ip: string;
     request_count: number;
@@ -227,7 +228,7 @@ export async function getIpSummary(clientIp: string) {
     user_agents: Array<{ user_agent: string; count: number }>;
     status_distribution: Record<string, number>;
     top_paths: Array<{ request_path: string; count: number }>;
-  }>(`api/search/ip-summary/${encodeURIComponent(clientIp)}`);
+  }>(buildQuery(base, opts));
 }
 
 // ── Projects ─────────────────────────────────────────────────────────────────

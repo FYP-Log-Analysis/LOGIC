@@ -482,9 +482,36 @@ def get_ip_summary(client_ip: str, project_id: str | None = None) -> dict:
     ips = _load_ip_summaries(project_id)
     s   = ips.get(client_ip)
     if s:
+        # user_agents and top_paths are stored as dicts {key: count} after
+        # _load_ip_summaries merges multiple uploads.  Convert to the array
+        # format the frontend and API consumers expect.
+        raw_ua = s.get("user_agents", {})
+        if isinstance(raw_ua, dict):
+            user_agents_list = [
+                {"user_agent": ua, "count": cnt}
+                for ua, cnt in sorted(raw_ua.items(), key=lambda x: -x[1])
+            ]
+        else:
+            user_agents_list = raw_ua  # already a list (old format)
+
+        raw_paths = s.get("top_paths", {})
+        if isinstance(raw_paths, dict):
+            top_paths_list = [
+                {"request_path": path, "count": cnt}
+                for path, cnt in sorted(raw_paths.items(), key=lambda x: -x[1])[:20]
+            ]
+        else:
+            top_paths_list = raw_paths  # already a list (old format)
+
         return {
             "client_ip":           client_ip,
-            **s,
+            "request_count":       s.get("request_count", 0),
+            "unique_paths":        s.get("unique_paths", 0),
+            "first_seen":          s.get("first_seen"),
+            "last_seen":           s.get("last_seen"),
+            "user_agents":         user_agents_list,
+            "status_distribution": s.get("status_distribution", {}),
+            "top_paths":           top_paths_list,
         }
     return {
         "client_ip":           client_ip,

@@ -34,6 +34,17 @@ function CredentialForm({ role, onBack }: { role: "admin" | "analyst"; onBack: (
       if (!res.ok) { setError(data.error ?? "Login failed."); return; }
 
       const userRole = (data.role ?? "analyst").toLowerCase() as "admin" | "analyst" | "user";
+
+      // Enforce portal-role consistency: reject cross-role logins
+      if (userRole !== role) {
+        setError(
+          role === "admin"
+            ? "This account does not have admin privileges. Please use the Analyst portal."
+            : "Admin accounts must use the Admin portal."
+        );
+        return;
+      }
+
       setUser({ username: data.username, role: userRole, userId: data.user_id, email: data.email ?? "" });
       if (userRole !== "admin") setProjectSelectPending(true);
       router.push(userRole === "admin" ? "/admin" : "/overview");

@@ -54,3 +54,4 @@ data/crs_audit/
 !data/crs_rules/
 !data/sigma_rules/data/crs_audit/audit.log
 data/crs_audit/audit.log
+data/crs_audit/audit.log

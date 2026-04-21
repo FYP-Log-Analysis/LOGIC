@@ -449,13 +449,12 @@ export function WindowsEventTable({
 }
 
 interface SeverityBadgeProps {
-  severity: "critical" | "high" | "medium" | "low";
+  severity: "high" | "medium" | "low";
 }
 
 export function SeverityBadge({ severity }: SeverityBadgeProps) {
-  const colors = {
-    critical: "#ff4444",
-    high: "#ff8800",
+  const sevColor = {
+    high: "#ff4444",
     medium: "#f0c040",
     low: "#4488ff",
   };
@@ -469,7 +468,7 @@ export function SeverityBadge({ severity }: SeverityBadgeProps) {
       fontWeight: "bold",
       letterSpacing: 0.8,
       textTransform: "uppercase",
-      background: colors[severity],
+      background: sevColor[severity],
       color: "#000",
     }}>
       {severity.toUpperCase()}

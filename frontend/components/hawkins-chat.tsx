@@ -126,7 +126,7 @@ function buildContextFields(props: HawkinsChatProps): ContextField[] {
         metadata: props.selectedContext.metadata ?? {},
         payload: props.selectedContext.payload,
       },
-      priority: props.selectedContext.priority ?? "critical",
+      priority: props.selectedContext.priority ?? "high",
       category: "selection",
     });
   }

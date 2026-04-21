@@ -4,7 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 
 export interface ThreatEvent {
   timestamp: string;
-  severity: "info" | "warning" | "critical";
+  severity: "info" | "low" | "medium" | "warning" | "high";
   type: "web" | "windows" | "detection";
   title: string;
   details?: string;
@@ -21,8 +21,10 @@ export interface ThreatTimelineProps {
 
 const severityColors: Record<string, string> = {
   info: "#42a5f5",
+  low: "#4488ff",
+  medium: "#f0c040",
   warning: "#ffa726",
-  critical: "#ef5350",
+  high: "#ff4444",
 };
 
 export function ThreatTimeline({ events, onEventClick, height = 300, emptyState }: ThreatTimelineProps) {
@@ -65,7 +67,7 @@ export function ThreatTimeline({ events, onEventClick, height = 300, emptyState 
         </span>
 
         <div style={{ display: "flex", gap: "6px" }}>
-          {["info", "warning", "critical"].map((sev) => (
+          {["info", "low", "medium", "warning", "high"].map((sev) => (
             <button
               key={sev}
               onClick={() => setFilterSeverity(filterSeverity === sev ? null : sev)}

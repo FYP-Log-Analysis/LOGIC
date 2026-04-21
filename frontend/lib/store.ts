@@ -30,7 +30,7 @@ export interface TimeRange {
   to: string;
 }
 
-export type AssistantContextPriority = "critical" | "high" | "medium" | "low";
+export type AssistantContextPriority = "high" | "medium" | "low";
 
 export interface AssistantFocusContext {
   id: string;

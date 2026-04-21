@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
 import {
   explainWindowsEvent,
   getOverviewData,
@@ -17,7 +16,6 @@ import {
 import { useAuthStore } from "@/lib/store";
 import { SectionHeader, MetricCard, Divider, Spinner, Btn } from "@/components/ui-primitives";
 import BarChart from "@/components/charts/bar-chart";
-import PieChart from "@/components/charts/pie-chart";
 import { EventDetailModal } from "@/components/event-detail-modal";
 import AgentMonitorControls from "@/components/agent-monitor-controls";
 
@@ -126,84 +124,7 @@ function MicroTile({ label, value, sub, accent = "#4a7c59" }: MicroTileProps) {
   );
 }
 
-interface WorkflowStepProps {
-  idx: number;
-  text: string;
-}
-
-function WorkflowStep({ idx, text }: WorkflowStepProps) {
-  return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "20px 1fr",
-        gap: 8,
-        alignItems: "start",
-      }}
-    >
-      <div
-        style={{
-          width: 20,
-          height: 20,
-          borderRadius: 999,
-          border: "1px solid #315b8f",
-          background: "#0d1a3d",
-          color: "#7fa8bf",
-          fontSize: 10,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          lineHeight: 1,
-        }}
-      >
-        {idx}
-      </div>
-      <div style={{ fontSize: 12, color: "#c8c8c8", lineHeight: 1.45 }}>{text}</div>
-    </div>
-  );
-}
-
-interface NavActionButtonProps {
-  label: string;
-  onClick: () => void;
-}
-
-function NavActionButton({ label, onClick }: NavActionButtonProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        border: "1px solid #315b8f",
-        background: "#0d1a3d",
-        color: "#7fa8bf",
-        borderRadius: 2,
-        fontSize: 11,
-        letterSpacing: 0.8,
-        textTransform: "uppercase",
-        padding: "8px 12px",
-        cursor: "pointer",
-        fontFamily: "inherit",
-        transition: "border-color 0.15s ease, background 0.15s ease",
-      }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.borderColor = "#4a7c59";
-        (e.currentTarget as HTMLButtonElement).style.background = "#1a3d2a";
-        (e.currentTarget as HTMLButtonElement).style.color = "#7cb342";
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.borderColor = "#315b8f";
-        (e.currentTarget as HTMLButtonElement).style.background = "#0d1a3d";
-        (e.currentTarget as HTMLButtonElement).style.color = "#7fa8bf";
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
 export default function OverviewPage() {
-  const router = useRouter();
   const [stats, setStats] = useState<LogStatistics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -222,7 +143,6 @@ export default function OverviewPage() {
   const [webDetectionsCount, setWebDetectionsCount] = useState<number | null>(null);
   const [webUniqueRulesCount, setWebUniqueRulesCount] = useState<number | null>(null);
   const [sigmaSummaryLoading, setSigmaSummaryLoading] = useState(false);
-  const [sigmaSummaryError, setSigmaSummaryError] = useState<string | null>(null);
   const { activeProject } = useAuthStore();
   const isWindowsProject = activeProject?.project_type === "windows";
   const PAGE_SIZE = 50;
@@ -328,7 +248,6 @@ export default function OverviewPage() {
       setSigmaMatchesCount(null);
       setWebDetectionsCount(null);
       setWebUniqueRulesCount(null);
-      setSigmaSummaryError(null);
       setSigmaSummaryLoading(false);
       return;
     }
@@ -337,7 +256,6 @@ export default function OverviewPage() {
 
     const loadDetectionSummary = async () => {
       setSigmaSummaryLoading(true);
-      setSigmaSummaryError(null);
       try {
         if (isWindowsProject) {
           setWebDetectionsCount(null);
@@ -390,7 +308,6 @@ export default function OverviewPage() {
         setSigmaMatchesCount(null);
         setWebDetectionsCount(null);
         setWebUniqueRulesCount(null);
-        setSigmaSummaryError(e instanceof Error ? e.message : "Failed to load detection summary.");
       } finally {
         if (!cancelled) setSigmaSummaryLoading(false);
       }
@@ -453,7 +370,6 @@ export default function OverviewPage() {
     void loadLiveWindow(false);
   }, [loadData, loadLiveWindow]);
 
-  const summaryModeText = isWindowsProject ? ".EVTX -> SIGMA" : "HTTP -> WAF RULES";
   const summaryLeftPrimary =
     sigmaSummaryLoading
       ? "..."
@@ -468,145 +384,43 @@ export default function OverviewPage() {
         ? (sigmaMatchesCount ?? "—").toString()
         : (webUniqueRulesCount ?? "—").toString();
 
-  const workflowSteps = isWindowsProject
-    ? [
-        "Ingest raw telemetry (.evtx or web logs).",
-        "Normalize records into consistent event fields.",
-        "Evaluate Sigma conditions against each event.",
-        "Store matches and queue analyst triage.",
-      ]
-    : [
-        "Ingest raw HTTP access and request logs.",
-        "Normalize request, status, and source fields.",
-        "Evaluate CRS/WAF rules against each request.",
-        "Store rule matches and queue analyst triage.",
-      ];
-
   const detectionSummarySection = (
     <div className="section-block">
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1.3fr) minmax(0, 1fr)",
-          gap: 14,
-        }}
-      >
-        <div
-          style={{
-            borderLeft: "1px solid #1e1e1e",
-            borderRight: "1px solid #1e1e1e",
-            borderBottom: "1px solid #1e1e1e",
-            borderTop: "2px solid #2f4a38",
-            borderRadius: 6,
-            background: "linear-gradient(180deg, #111611 0%, #0d0d0d 100%)",
-            padding: 12,
-          }}
-        >
-          <div style={{ fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: "#6e8796", marginBottom: 10 }}>
-            Detection Snapshot
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
-            <MicroTile
-              label={isWindowsProject ? "Sigma Rules" : "Rule Matches"}
-              value={summaryLeftPrimary}
-              sub={isWindowsProject ? "Loaded rule catalog" : "CRS/WAF detections"}
-              accent="#4a7c59"
-            />
-            <MicroTile
-              label={isWindowsProject ? "Rule Matches" : "Unique Rules"}
-              value={summaryLeftSecondary}
-              sub={isWindowsProject ? "Current project results" : "Triggered in current scope"}
-              accent="#315b8f"
-            />
-            <MicroTile label="Mode" value={summaryModeText} sub="Detection mapping" accent="#4a4a4a" />
-            <MicroTile label="Project Type" value={isWindowsProject ? "WINDOWS" : "WEB"} sub="Active scope" accent="#4a4a4a" />
-            <MicroTile
-              label="Agent Status"
-              value={(monitor?.status ?? "idle").toUpperCase()}
-              sub="Live collector state"
-              accent={monitor?.status === "active" ? "#4a7c59" : "#3a3a3a"}
-            />
-            <MicroTile label="Uptime" value={formatUptime(monitor?.uptime_seconds ?? 0)} sub="Collector runtime" accent="#315b8f" />
-          </div>
-        </div>
-
-        <div
-          style={{
-            borderLeft: "1px solid #1e1e1e",
-            borderRight: "1px solid #1e1e1e",
-            borderBottom: "1px solid #1e1e1e",
-            borderTop: "2px solid #2e4566",
-            borderRadius: 6,
-            background: "linear-gradient(180deg, #101725 0%, #0d0d0d 100%)",
-            padding: 12,
-          }}
-        >
-          <div style={{ fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: "#7fa8bf", marginBottom: 10 }}>
-            Detection Workflow
-          </div>
-          <div style={{ display: "grid", gap: 8 }}>
-            {workflowSteps.map((step, idx) => (
-              <WorkflowStep key={step} idx={idx + 1} text={step} />
-            ))}
-          </div>
-
-          <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-            {isWindowsProject ? (
-              <>
-                <NavActionButton label="Go To Rule Based Detection" onClick={() => router.push("/windows-analysis")} />
-                <NavActionButton label="View Sigma Rules" onClick={() => router.push("/rules-setup")} />
-                <NavActionButton label="View Anomalous Windows" onClick={() => router.push("/windows-behavioral")} />
-              </>
-            ) : (
-              <>
-                <NavActionButton label="Go To Web Analysis" onClick={() => router.push("/analysis")} />
-                <NavActionButton label="View Web Detections" onClick={() => router.push("/detections")} />
-                <NavActionButton label="View Web Behavioral" onClick={() => router.push("/behavioral")} />
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div
-        style={{
-          marginTop: 10,
           borderLeft: "1px solid #1e1e1e",
           borderRight: "1px solid #1e1e1e",
           borderBottom: "1px solid #1e1e1e",
           borderTop: "2px solid #2f4a38",
-          borderRadius: 4,
-          background: "linear-gradient(180deg, #101410 0%, #0d0d0d 100%)",
-          padding: "10px 12px",
+          borderRadius: 6,
+          background: "linear-gradient(180deg, #111611 0%, #0d0d0d 100%)",
+          padding: 12,
         }}
       >
-        <div style={{ fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: "#7fa8bf", marginBottom: 6 }}>
-          Threat Detection Guide
+        <div style={{ fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: "#6e8796", marginBottom: 10 }}>
+          Detection Snapshot
         </div>
-        <div style={{ fontSize: 12, color: "#c8c8c8", lineHeight: 1.6, maxWidth: 920 }}>
-          {isWindowsProject ? (
-            <>
-              1. .evtx logs are normalized into structured events.
-              <br />
-              2. Sigma conditions are evaluated against each event.
-              <br />
-              3. Matched rules are stored as rule-based detections for analyst triage.
-            </>
-          ) : (
-            <>
-              1. Web access logs are normalized into HTTP event records.
-              <br />
-              2. CRS/WAF rules are evaluated against each request.
-              <br />
-              3. Matched web detections are stored for analyst triage.
-            </>
-          )}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 }}>
+          <MicroTile
+            label={isWindowsProject ? "Sigma Rules" : "Rule Matches"}
+            value={summaryLeftPrimary}
+            sub={isWindowsProject ? "Loaded rule catalog" : "CRS/WAF detections"}
+            accent="#4a7c59"
+          />
+          <MicroTile
+            label={isWindowsProject ? "Rule Matches" : "Unique Rules"}
+            value={summaryLeftSecondary}
+            sub={isWindowsProject ? "Current project results" : "Triggered in current scope"}
+            accent="#315b8f"
+          />
+          <MicroTile
+            label="Agent Status"
+            value={(monitor?.status ?? "idle").toUpperCase()}
+            sub="Live collector state"
+            accent={monitor?.status === "active" ? "#4a7c59" : "#3a3a3a"}
+          />
+          <MicroTile label="Uptime" value={formatUptime(monitor?.uptime_seconds ?? 0)} sub="Collector runtime" accent="#315b8f" />
         </div>
-        {sigmaSummaryError && (
-          <div style={{ marginTop: 10, fontSize: 11, color: "#8a8a8a" }}>
-            Detection summary unavailable: {sigmaSummaryError}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -938,25 +752,11 @@ export default function OverviewPage() {
     hourly_heatmap,
     top_ips,
     top_paths,
-    status_classes,
-    bot_count,
-    human_count,
   } = stats;
 
   const hourCounts = Array.from({ length: 24 }, (_, h) => hourly_heatmap[h] ?? hourly_heatmap[String(h)] ?? 0);
   const maxHour = Math.max(...hourCounts, 1);
   const hasTimestamps = hourCounts.some((c) => c > 0);
-
-  const statusColors: Record<string, string> = {
-    "2xx": "#4caf50",
-    "3xx": "#4488ff",
-    "4xx": "#f0c040",
-    "5xx": "#ff4444",
-    other: "#666",
-  };
-
-  const statusFiltered = (["2xx", "3xx", "4xx", "5xx", "other"] as const)
-    .filter((k) => (status_classes[k] ?? 0) > 0);
 
   const peakHour = hourCounts.reduce(
     (best, count, hour) => (count > best.count ? { hour, count } : best),
@@ -991,14 +791,12 @@ export default function OverviewPage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: isWindowsProject ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
             gap: 18,
           }}
         >
           <MetricCard label="Total Entries" value={total_entries.toLocaleString()} />
           {!isWindowsProject && <MetricCard label="Unique IPs" value={unique_ips.toLocaleString()} />}
-          {!isWindowsProject && <MetricCard label="Bot Requests" value={bot_count.toLocaleString()} accent="#ff8800" />}
-          {!isWindowsProject && <MetricCard label="Human Requests" value={human_count.toLocaleString()} accent="#42a5f5" />}
           {isWindowsProject && <MetricCard label="Top Path Hits" value={topPathCount.toLocaleString()} sub="Most requested endpoint volume" accent="#707070" />}
         </div>
 
@@ -1027,28 +825,6 @@ export default function OverviewPage() {
             </div>
           </div>
         )}
-      </div>
-
-      <div className="section-block">
-        <div style={{ display: "grid", gridTemplateColumns: !isWindowsProject ? "1fr 1fr" : "1fr", gap: 20 }}>
-          {statusFiltered.length > 0 && (
-            <PieChart
-              title="Status Code Classes"
-              labels={statusFiltered.map((k) => k === "2xx" ? "2xx Success" : k === "3xx" ? "3xx Redirect" : k === "4xx" ? "4xx Client Error" : k === "5xx" ? "5xx Server Error" : "Other")}
-              values={statusFiltered.map((k) => status_classes[k])}
-              colors={statusFiltered.map((k) => statusColors[k] ?? "#555")}
-            />
-          )}
-          {!isWindowsProject && (
-            <PieChart
-              title="Bot vs Human"
-              labels={["Human", "Bot"]}
-              values={[human_count, bot_count]}
-              colors={["#42a5f5", "#ff8800"]}
-              height={210}
-            />
-          )}
-        </div>
       </div>
 
       <Divider />

@@ -206,7 +206,6 @@ export default function WindowsBehavioralPage() {
               unique_rules: 0,
               highest_severity: "none",
               severity_breakdown: {
-                critical: 0,
                 high: 0,
                 medium: 0,
                 low: 0,
@@ -269,7 +268,7 @@ export default function WindowsBehavioralPage() {
         is_anomalous: windowRecord.is_anomalous,
         sigma_matches: selectedWindowFindings?.sigma_summary.total_matches ?? 0,
       },
-      priority: "critical",
+      priority: "high",
     });
   }, [clearAssistantFocus, result, selectedWindowFindings, selectedWindowStart, setAssistantFocus]);
 

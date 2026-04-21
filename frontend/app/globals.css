@@ -25,8 +25,7 @@
   --theme-foreground-soft: #d7e2e9;
 
   /* Severity colors */
-  --severity-critical: #ff4444;
-  --severity-high: #ff8800;
+  --severity-high: #ff4444;
   --severity-medium: #f0c040;
   --severity-low: #4488ff;
 

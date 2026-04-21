@@ -376,9 +376,6 @@ export default function AgentsPage() {
             )}
           </div>
 
-          <div style={{ color: "#555", fontSize: 12, marginBottom: 24 }}>
-            Incoming raw logs were moved to the Overview page, where live status and stream activity are now displayed together.
-          </div>
         </>
       )}
 

@@ -49,12 +49,11 @@ interface IpRow {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const SEV_ORDER: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+const SEV_ORDER: Record<string, number> = { HIGH: 3, MEDIUM: 2, LOW: 1 };
 
-function severityColor(sev: string): string {
+function sevColor(sev: string) {
   switch (sev) {
-    case "CRITICAL": return "#ff4c4c";
-    case "HIGH": return "#ff9800";
+    case "HIGH": return "#ff4c4c";
     case "MEDIUM": return "#f0c040";
     default: return "#8bc34a";
   }
@@ -213,7 +212,7 @@ export default function CorrelationPage() {
         (urlEnum ? 2 : 0) +
         (statusSpike ? 1 : 0) +
         (visitorAnomaly ? 1 : 0) +
-        ((highestSev === "CRITICAL") ? 20 : (highestSev === "HIGH") ? 10 : 0);
+        (highestSev === "HIGH" ? 10 : 0);
       const isCorrelated = ipMatches.length >= 2 || (ipMatches.length > 0 && behaviorSignalCount > 0) || behaviorSignalCount >= 2;
       const lastSeen = ipMatches.length > 0
         ? ipMatches
@@ -311,7 +310,6 @@ export default function CorrelationPage() {
 
   const correlatedRows = ipRows.filter((r) => r.isCorrelated);
   const totalIps = ipRows.length;
-  const criticalCount = ipRows.filter((r) => r.highestSev === "CRITICAL").length;
   const highCount = ipRows.filter((r) => r.highestSev === "HIGH").length;
 
   // Category breakdown across all IPs
@@ -337,8 +335,7 @@ export default function CorrelationPage() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 24 }}>
         <MetricCard label="Known IPs" value={totalIps} sub="from rule matches" accent="#c0c0c0" />
         <MetricCard label="Correlated IPs" value={correlatedRows.length} sub="rules + behavioral" accent="#22c55e" />
-        <MetricCard label="Critical Severity" value={criticalCount} sub="highest-severity IPs" accent="#ff4c4c" />
-        <MetricCard label="High Severity" value={highCount} sub="high-severity IPs" accent="#ff9800" />
+        <MetricCard label="High Severity" value={highCount} sub="highest-severity IPs" accent="#ff4c4c" />
       </div>
 
       {/* High Confidence Threat Actors */}
@@ -629,7 +626,7 @@ export default function CorrelationPage() {
             <thead>
               <tr>
                 <th style={{ padding: "6px 10px", color: "#666", textAlign: "left", minWidth: 120 }}>IP</th>
-                {["Rule Match", "Rate Spike", "URL Enum", "Visitor Anomaly", "High/Critical"].map((col) => (
+                {["Rule Match", "Rate Spike", "URL Enum", "Visitor Anomaly", "High Sev"].map((col) => (
                   <th key={col} style={{ padding: "6px 8px", color: "#666", textAlign: "center", minWidth: 90 }}>{col}</th>
                 ))}
               </tr>
@@ -651,7 +648,7 @@ export default function CorrelationPage() {
                     <MatrixCell hit={row.visitorAnomaly} color="#e91e63" />
                   </td>
                   <td style={{ padding: "4px 6px" }}>
-                    <MatrixCell hit={row.highestSev === "CRITICAL" || row.highestSev === "HIGH"} color="#ff4c4c" />
+                    <MatrixCell hit={row.highestSev === "HIGH"} color="#ff4c4c" />
                   </td>
                 </tr>
               ))}
@@ -664,7 +661,7 @@ export default function CorrelationPage() {
             { label: "Rate Spike", color: "#ff9800" },
             { label: "URL Enum", color: "#2196f3" },
             { label: "Visitor Anomaly", color: "#e91e63" },
-            { label: "High/Critical", color: "#ff4c4c" },
+            { label: "High Sev", color: "#ff4c4c" },
           ].map(({ label, color }) => (
             <span key={label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#666" }}>
               <span style={{ width: 10, height: 10, background: color, borderRadius: 2, display: "inline-block" }} />

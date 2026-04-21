@@ -69,8 +69,7 @@ export const DARK_DEFAULTS = {
 };
 
 export const SEV_COLORS: Record<string, string> = {
-  critical: "#ff4444",
-  high: "#ff8800",
+  high: "#ff4444",
   medium: "#f0c040",
   low: "#4488ff",
   unknown: "#555555",

@@ -23,25 +23,27 @@ type SortDirection = "asc" | "desc";
 type SortKey = "timestamp" | "severity" | "type" | "title" | "source";
 
 const severityColors: Record<ThreatEvent["severity"], string> = {
-  critical: "#ff4444",
-  warning: "#f0c040",
-  info: "#4488ff",
+  high: "#ff4444",
+  warning: "#ffa726",
+  medium: "#f0c040",
+  low: "#4488ff",
+  info: "#42a5f5",
 };
 
 const severityRank: Record<ThreatEvent["severity"], number> = {
-  critical: 3,
-  warning: 2,
+  high: 5,
+  warning: 4,
+  medium: 3,
+  low: 2,
   info: 1,
 };
 
 function toTimelineEvent(match: RuleMatch): ThreatEvent {
   const sev = (match.severity ?? "low").toLowerCase();
   const severity: ThreatEvent["severity"] =
-    sev === "critical" || sev === "high"
-      ? "critical"
-      : sev === "medium"
-        ? "warning"
-        : "info";
+    ["high", "medium", "low", "warning", "info"].includes(sev)
+      ? (sev as ThreatEvent["severity"])
+      : "info";
 
   return {
     timestamp: match.timestamp || new Date().toISOString(),
@@ -69,7 +71,7 @@ function toAssistantContext(event: ThreatEvent) {
       type: event.type,
       details: event.details ?? null,
     },
-    priority: "critical" as const,
+    priority: "high" as const,
   };
 }
 
@@ -212,8 +214,10 @@ export default function ThreatTimelinePage() {
           onChange={setSeverityFilter}
           options={[
             { value: "", label: "All Severities" },
-            { value: "critical", label: "CRITICAL" },
+            { value: "high", label: "HIGH" },
+            { value: "medium", label: "MEDIUM" },
             { value: "warning", label: "WARNING" },
+            { value: "low", label: "LOW" },
             { value: "info", label: "INFO" },
           ]}
         />

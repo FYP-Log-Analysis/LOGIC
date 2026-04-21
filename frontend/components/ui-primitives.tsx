@@ -271,8 +271,8 @@ export function AlertBanner(props: AlertBannerProps) {
   // Log-entry alert banner
   const match = props.match!;
   const sev = (match.severity ?? "").toUpperCase();
-  const color = sev === "CRITICAL" ? "#cc0000" : "#cc5500";
-  const bg = sev === "CRITICAL" ? "#8B000022" : "#7a330022";
+  const color = sev === "HIGH" ? "#cc0000" : "#cc5500";
+  const bg = sev === "HIGH" ? "#8B000022" : "#7a330022";
 
   return (
     <div

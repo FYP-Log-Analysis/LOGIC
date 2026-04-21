@@ -42,7 +42,7 @@ type InvestigationRow = {
   source: "sigma" | "behavioral";
   title: string;
   timestamp?: string;
-  severity: "critical" | "high" | "medium" | "low";
+  severity: "high" | "medium" | "low";
   computer?: string;
   event_id?: string | number;
   channel?: string;
@@ -53,7 +53,6 @@ type InvestigationRow = {
 };
 
 const severityOrder: Record<InvestigationRow["severity"], number> = {
-  critical: 4,
   high: 3,
   medium: 2,
   low: 1,
@@ -65,14 +64,15 @@ const EXTRA_FIELDS = ["auth_user", "client_ip", "command_line", "message", "proc
 
 function normalizeSeverity(value: unknown): InvestigationRow["severity"] {
   const sev = String(value ?? "low").toLowerCase();
-  if (sev === "critical" || sev === "high" || sev === "medium") return sev;
+  if (sev === "critical" || sev === "high") return "high";
+  if (sev === "medium") return sev;
   return "low";
 }
 
 function anomalyToSeverity(score: number | null | undefined, isAnomalous: boolean): InvestigationRow["severity"] {
   if (!isAnomalous) return "low";
   const normalized = score ?? 0;
-  if (normalized <= -0.6) return "critical";
+  if (normalized <= -0.6) return "high";
   if (normalized <= -0.3) return "high";
   return "medium";
 }
@@ -451,7 +451,7 @@ export default function WindowsAnalysisPage() {
         mitre_techniques: selectedRow.mitre_techniques ?? [],
         details_panel_open: showDetailsPanel,
       },
-      priority: "critical",
+      priority: "high",
     });
   }, [clearAssistantFocus, selectedRow, setAssistantFocus, showDetailsPanel]);
 
@@ -472,7 +472,6 @@ export default function WindowsAnalysisPage() {
 
   const severityCounts = useMemo(() => {
     return {
-      critical: sortedRows.filter((r) => r.severity === "critical").length,
       high: sortedRows.filter((r) => r.severity === "high").length,
       medium: sortedRows.filter((r) => r.severity === "medium").length,
       low: sortedRows.filter((r) => r.severity === "low").length,
@@ -724,7 +723,6 @@ export default function WindowsAnalysisPage() {
               onChange={(e) => setSeverityFilter(e.target.value)}
               options={[
                 { value: "all", label: "All" },
-                { value: "critical", label: "Critical" },
                 { value: "high", label: "High" },
                 { value: "medium", label: "Medium" },
                 { value: "low", label: "Low" },
@@ -880,9 +878,8 @@ export default function WindowsAnalysisPage() {
               <WindowsDivider />
 
               <WindowsDataPanel title="Severity Snapshot" accent="#5f5f5f">
-                <WindowsStatGrid columns={4}>
-                  <WindowsMetricCard label="Critical" value={severityCounts.critical} accent="#8b3a3a" />
-                  <WindowsMetricCard label="High" value={severityCounts.high} accent="#8c6a36" />
+                <WindowsStatGrid columns={3}>
+                  <WindowsMetricCard label="High" value={severityCounts.high} accent="#8b3a3a" />
                   <WindowsMetricCard label="Medium" value={severityCounts.medium} accent="#7a7a52" />
                   <WindowsMetricCard label="Low" value={severityCounts.low} accent="#4d6c7f" />
                 </WindowsStatGrid>

@@ -42,9 +42,9 @@ type ExtractedWebIocs = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const SEV_ORDER = ["critical", "high", "medium", "low", "unknown"];
+const SEV_ORDER = ["high", "medium", "low", "unknown"];
 const SEV_COLORS: Record<string, string> = {
-  critical: "#ff4444", high: "#ff8800", medium: "#f0c040", low: "#4488ff", unknown: "#555",
+  high: "#ff4444", medium: "#f0c040", low: "#4488ff", unknown: "#555",
 };
 const IPV4_RE = /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g;
 const DOMAIN_RE = /\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b/g;
@@ -163,7 +163,7 @@ function toDetectionAssistantContext(match: RuleMatch, rowId: string) {
       path: match.path ?? null,
       status_code: match.status_code ?? null,
     },
-    priority: "critical" as const,
+    priority: "high" as const,
   };
 }
 
@@ -228,7 +228,7 @@ function OverviewCharts({ agg }: { agg: DetectionAggregations }) {
   const tlLabels = tlHours.map((h) =>
     new Date(h + ":00Z").toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
   );
-  const tlDatasets = ["critical", "high", "medium", "low"].map((sev) => ({
+  const tlDatasets = ["high", "medium", "low"].map((sev) => ({
     label: sev.charAt(0).toUpperCase() + sev.slice(1),
     data: tlHours.map((h) => hourlyTimeline[h]?.[sev] ?? 0),
     color: SEV_COLORS[sev] ?? "#555",
@@ -734,11 +734,10 @@ export default function DetectionsPage() {
       </div>
 
       {/* Top metrics */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 24 }}>
         <MetricCard label="Total Alerts" value={totalDetections.toLocaleString()} />
         <MetricCard label="Unique Rules" value={uniqueRules.toLocaleString()} />
-        <MetricCard label="Critical" value={(matchSeverityCounts.critical ?? 0).toLocaleString()} accent="#ff4444" />
-        <MetricCard label="High" value={(matchSeverityCounts.high ?? 0).toLocaleString()} accent="#ff8800" />
+        <MetricCard label="High" value={(matchSeverityCounts.high ?? 0).toLocaleString()} accent="#ff4444" />
         <MetricCard label="Open Alerts" value={openAlerts.toLocaleString()} accent="#f0c040" sub="New + Investigating" />
       </div>
 

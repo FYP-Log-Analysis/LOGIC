@@ -5,7 +5,7 @@ import { useState, useMemo } from "react";
 export interface SigmaRule {
   id: string;
   title: string;
-  severity: "low" | "medium" | "high" | "critical";
+  severity: "low" | "medium" | "high";
   detection_count?: number;
   last_matched?: string;
   enabled?: boolean;
@@ -20,8 +20,7 @@ export interface ActiveSigmaRulesProps {
 const severityBadgeColor: Record<string, string> = {
   low: "#42a5f5",
   medium: "#ffa726",
-  high: "#ef5350",
-  critical: "#c62828",
+  high: "#c62828",
 };
 
 export function ActiveSigmaRules({ rules, onRuleToggle, matchSummary = {} }: ActiveSigmaRulesProps) {
@@ -85,7 +84,7 @@ export function ActiveSigmaRules({ rules, onRuleToggle, matchSummary = {} }: Act
         />
 
         <div style={{ display: "flex", gap: "4px" }}>
-          {["low", "medium", "high", "critical"].map((sev) => (
+          {["low", "medium", "high"].map((sev) => (
             <button
               key={sev}
               onClick={() => setFilterSeverity(filterSeverity === sev ? null : sev)}

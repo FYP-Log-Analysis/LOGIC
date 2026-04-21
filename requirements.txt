@@ -12,5 +12,3 @@ scikit-learn
 # Auth
 python-jose[cryptography]
 bcrypt>=4.0.0
-# sqlite3 is part of the Python standard library — no install needed
-# Next.js frontend is in frontend/ and managed by npm — no Python package needed

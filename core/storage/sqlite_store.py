@@ -1228,7 +1228,7 @@ def get_overview_stats(
     attack_success_rate = round((success_count / total_det) * 100, 1) if total_det else 0.0
 
     recent_alerts = sorted(
-        [m for m in matches if (m.get("severity") or "").lower() in ("critical", "high")],
+        [m for m in matches if (m.get("severity") or "").lower() == "high"],
         key=lambda x: (x.get("timestamp") or ""),
         reverse=True,
     )[:20]

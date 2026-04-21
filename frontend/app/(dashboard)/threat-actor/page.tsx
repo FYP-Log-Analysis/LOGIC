@@ -55,7 +55,7 @@ interface IpProfile {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const SEV_ORDER: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+const SEV_ORDER: Record<string, number> = { HIGH: 3, MEDIUM: 2, LOW: 1 };
 
 function getCrsCategory(ruleId?: string, ruleTitle?: string): string {
   const title = (ruleTitle ?? "").toLowerCase();
@@ -75,10 +75,9 @@ function getCrsCategory(ruleId?: string, ruleTitle?: string): string {
   return "Other";
 }
 
-function severityColor(sev?: string): string {
-  switch ((sev ?? "").toUpperCase()) {
-    case "CRITICAL": return "#ff4c4c";
-    case "HIGH": return "#ff9800";
+function severityColor(sev: string) {
+  switch (sev) {
+    case "HIGH": return "#ff4c4c";
     case "MEDIUM": return "#f0c040";
     default: return "#8bc34a";
   }
@@ -196,8 +195,8 @@ export default function ThreatActorPage() {
   const timelineEvents: ThreatEvent[] = ipMatches.map((match) => {
     const sev = (match.severity ?? "low").toLowerCase();
     const severity: ThreatEvent["severity"] =
-      sev === "critical" || sev === "high"
-        ? "critical"
+      sev === "high"
+        ? "high"
         : sev === "medium"
           ? "warning"
           : "info";
@@ -227,9 +226,8 @@ export default function ThreatActorPage() {
 
   // Risk score
   const riskScore = behRateSpikes.length * 3 + behUrlEnum.length * 2 + behVisitors.length;
-  const hasCritical = highestSev === "CRITICAL";
   const hasHigh = highestSev === "HIGH";
-  const finalRisk = riskScore + (hasCritical ? 20 : hasHigh ? 10 : 0);
+  const finalRisk = riskScore + (hasHigh ? 10 : 0);
 
   // Top paths (from ipProfile if available, else derive from matches)
   const topPaths: Array<{ label: string; count: number }> = ipProfile?.top_paths?.length
@@ -362,7 +360,7 @@ export default function ThreatActorPage() {
             <MetricCard
               label="Highest Severity"
               value={highestSev}
-              sub={`${hasCritical || hasHigh ? "⚠ Escalation risk" : "Moderate activity"}`}
+              sub={`${hasHigh ? "⚠ Escalation risk" : "Moderate activity"}`}
               accent={severityColor(highestSev)}
             />
             <MetricCard

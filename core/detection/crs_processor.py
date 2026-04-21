@@ -239,6 +239,7 @@ def _parse_audit_log(audit_path: str, tx_map: dict[str, dict], start_offset: int
                     msg_score = 0.0
 
                 anomaly_score = float(tx_anomaly_score) if tx_anomaly_score else msg_score
+                crs_severity_raw = details.get("severity") or msg.get("severity") or ""
 
                 matches.append(
                     {
@@ -249,6 +250,7 @@ def _parse_audit_log(audit_path: str, tx_map: dict[str, dict], start_offset: int
                         "uri": original_entry.get("request_path", ""),
                         "rule_id": rule_id,
                         "message": message,
+                        "crs_severity": str(crs_severity_raw),
                         "anomaly_score": anomaly_score,
                         "tags": json.dumps(tags),
                         "paranoia_level": paranoia_level,

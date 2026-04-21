@@ -56,7 +56,7 @@ const FALLBACK_DEFAULTS: BehavioralDefaults = {
 };
 
 type FeedCategory = "Rate Spike" | "URL Enumeration" | "Status Spike" | "Visitor Anomaly";
-type FeedSeverity = "critical" | "high" | "medium" | "low";
+type FeedSeverity = "high" | "medium" | "low";
 
 interface AnomalyFeedItem {
   id: string;
@@ -71,8 +71,7 @@ interface AnomalyFeedItem {
 }
 
 const SEVERITY_COLORS: Record<FeedSeverity, string> = {
-  critical: "#ff4444",
-  high: "#ff8800",
+  high: "#ff4444",
   medium: "#f0c040",
   low: "#6e8796",
 };
@@ -89,7 +88,6 @@ function formatBehavioralError(e: unknown, fallback: string): string {
 }
 
 function toSeverity(score: number): FeedSeverity {
-  if (score >= 85) return "critical";
   if (score >= 70) return "high";
   if (score >= 55) return "medium";
   return "low";
@@ -493,7 +491,6 @@ export default function BehavioralPage() {
   );
 
   const severityCounts = useMemo(() => ({
-    critical: anomalyFeed.filter((x) => x.severity === "critical").length,
     high: anomalyFeed.filter((x) => x.severity === "high").length,
     medium: anomalyFeed.filter((x) => x.severity === "medium").length,
     low: anomalyFeed.filter((x) => x.severity === "low").length,
@@ -637,8 +634,8 @@ export default function BehavioralPage() {
                 </div>
                 <div style={{ fontSize: 12, color: "#d7e2e9", lineHeight: 1.9 }}>
                   <div>
-                    <span style={{ color: "#ff6e6e" }}>{(severityCounts.critical + severityCounts.high).toLocaleString()}</span>
-                    {" "}critical/high events
+                    <span style={{ color: "#ff6e6e" }}>{(severityCounts.high).toLocaleString()}</span>
+                    {" "}high events
                   </div>
                   <div>
                     <span style={{ color: "#8aa0ad" }}>{dominantCategory.label}</span>
@@ -669,7 +666,7 @@ export default function BehavioralPage() {
                 <SelectInput
                   value={feedSeverity}
                   onChange={setFeedSeverity}
-                  options={["critical", "high", "medium", "low"]}
+                  options={["high", "medium", "low"]}
                   placeholder="All severities"
                 />
               </label>

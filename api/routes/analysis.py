@@ -289,7 +289,6 @@ def _run_analysis_task(
                 # rule_matches = total rule-hit count (can legitimately exceed total_logs)
                 "flagged_logs": overview.get("unique_flagged_entries", overview.get("total_detections", 0)),
                 "rule_matches": overview.get("total_detections", 0),
-                "critical_count": severity_breakdown.get("critical", 0),
                 "high_count": severity_breakdown.get("high", 0),
                 "medium_count": severity_breakdown.get("medium", 0),
                 "low_count": severity_breakdown.get("low", 0),

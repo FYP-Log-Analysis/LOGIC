@@ -24,7 +24,6 @@ interface RunResult {
     total_logs?: number;
     flagged_logs?: number;
     rule_matches?: number;
-    critical_count?: number;
     high_count?: number;
     medium_count?: number;
     low_count?: number;
@@ -179,14 +178,13 @@ export default function AnalysisPage() {
           </div>
 
           {/* Severity breakdown */}
-          {(stats.critical_count || stats.high_count || stats.medium_count || stats.low_count) ? (
+          {(stats.high_count || stats.medium_count || stats.low_count) ? (
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 11, color: "#555", letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>
                 Severity Breakdown
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
-                <MetricCard label="Critical" value={(stats.critical_count ?? 0).toLocaleString()} accent="#ff4444" />
-                <MetricCard label="High" value={(stats.high_count ?? 0).toLocaleString()} accent="#ff8800" />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+                <MetricCard label="High" value={(stats.high_count ?? 0).toLocaleString()} accent="#ff4444" />
                 <MetricCard label="Medium" value={(stats.medium_count ?? 0).toLocaleString()} accent="#f0c040" />
                 <MetricCard label="Low" value={(stats.low_count ?? 0).toLocaleString()} accent="#4488ff" />
               </div>
@@ -221,7 +219,7 @@ export default function AnalysisPage() {
                 <tbody>
                   {result.top_threats.map((t, i) => {
                     const sev = (t.severity ?? "low").toLowerCase();
-                    const sevColor: Record<string, string> = { critical: "#ff4444", high: "#ff8800", medium: "#f0c040", low: "#4488ff" };
+                    const sevColor: Record<string, string> = { high: "#ff4444", medium: "#f0c040", low: "#4488ff" };
                     return (
                       <tr key={i} style={{ borderBottom: "1px solid #111" }}>
                         <td style={{ padding: "7px 10px", color: "#c0c0c0" }}>{t.rule}</td>

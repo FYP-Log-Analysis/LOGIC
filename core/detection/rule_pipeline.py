@@ -28,7 +28,6 @@ _SEVERITY_RANK = {
     "low": 1,
     "medium": 2,
     "high": 3,
-    "critical": 4,
 }
 
 
@@ -65,7 +64,6 @@ def _load_windows_entries(src_path: Path) -> list[dict]:
 
 
 def _crs_severity(score: float) -> str:
-    if score >= 10: return "critical"
     if score >= 5:  return "high"
     if score >= 2:  return "medium"
     return "low"
@@ -112,10 +110,28 @@ def _contains_any(haystack: str, needles: tuple[str, ...]) -> bool:
 
 def _crs_severity_v2(cm: dict) -> tuple[str, dict]:
     score = float(cm.get("anomaly_score") or 0)
-    severity = _crs_severity(score)
+    crs_severity_raw = str(cm.get("crs_severity", "")).strip().upper()
+
+    # Base severity from explicitly matched rule string
+    if crs_severity_raw in ("EMERGENCY", "ALERT", "CRITICAL", "1", "0", "2"):
+        base_sev = "high"
+    elif crs_severity_raw in ("ERROR", "3"):
+        base_sev = "medium"
+    elif crs_severity_raw in ("WARNING", "NOTICE", "INFO", "DEBUG", "4", "5", "6", "7"):
+        base_sev = "low"
+    else:
+        # Fallback to the score-based legacy mapping if string not present/recognized
+        base_sev = _crs_severity(score)
+
+    # Always upgrade to high if the overall anomaly score threshold is high (>= 5)
+    if score >= 5:
+        base_sev = "high"
+
+    severity = base_sev
     details: dict[str, str | int | float] = {
         "base_severity": severity,
         "anomaly_score": score,
+        "crs_matched_severity": crs_severity_raw,
     }
 
     paranoia_level = cm.get("paranoia_level")
